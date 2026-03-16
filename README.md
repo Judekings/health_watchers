@@ -1,7 +1,7 @@
 # Health Watchers
 
 **AI-assisted Electronic Medical Records (EMR) powered by Stellar blockchain.**  
-*Adapted from [CIVRA-INC/LumenHealth](https://github.com/CIVRA-INC/LumenHealth) as a monorepo scaffold (10% implementation). Full patient management, encounters, payments on Stellar testnet/mainnet, AI insights.*
+*Adapted as a monorepo scaffold (10% implementation). Full patient management, encounters, payments on Stellar testnet/mainnet, AI insights.*
 
 ## 🚀 Quick Start
 
