@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { PageWrapper, PageHeader, Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui';
 
 interface Patient {
   id: string;
@@ -25,31 +26,47 @@ export default function PatientsPage() {
       });
   }, []);
 
-  if (loading) return <p>Loading patients...</p>;
+  if (loading) {
+    return (
+      <PageWrapper className="py-8">
+        <div className="flex items-center justify-center">
+          <p className="text-secondary-600">Loading patients...</p>
+        </div>
+      </PageWrapper>
+    );
+  }
 
   return (
-    <main style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h1>Patients</h1>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>ID</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>Name</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>DOB</th>
-          </tr>
-        </thead>
-        <tbody>
-          {patients.map(patient => (
-            <tr key={patient.id}>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{patient.id}</td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{patient.name}</td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{patient.dob}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p>No patients? API stub - implement CRUD.</p>
-    </main>
+    <PageWrapper className="py-8">
+      <PageHeader title="Patients" />
+      
+      <div className="space-y-6">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Date of Birth</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {patients.map(patient => (
+              <TableRow key={patient.id}>
+                <TableCell className="font-mono text-sm">{patient.id}</TableCell>
+                <TableCell className="font-medium">{patient.name}</TableCell>
+                <TableCell>{patient.dob}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        
+        {patients.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-secondary-600">No patients found. API stub - implement CRUD.</p>
+          </div>
+        )}
+      </div>
+    </PageWrapper>
   );
 }
 
