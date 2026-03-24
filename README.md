@@ -70,3 +70,16 @@ Fork → Branch → PR. See [CONTRIBUTING.md](CONTRIBUTING.md) (TBD).
 
 **Powered by Stellar – Decentralized health payments.**
 
+
+## Design
+
+Interactive Figma prototype flows for Health Watchers EMR.
+All links are view-only — no Figma account required.
+
+| # | Flow | Link |
+|---|------|------|
+| 1 | Login to Dashboard (success, error, MFA) | [View Prototype](https://www.figma.com/proto/fMSSNhPwYLewJWLDsA64DJ/Stellar?node-id=40-470&p=f&t=oXRhEZQ2VCN0s8YL-1&scaling=min-zoom&content-scaling=fixed&page-id=0%3A1&starting-point-node-id=40%3A470&show-proto-sidebar=1) |
+| 2 | Register a Patient | [View Prototype](https://www.figma.com/proto/fMSSNhPwYLewJWLDsA64DJ/Stellar?node-id=13-1131&p=f&t=oXRhEZQ2VCN0s8YL-9&scaling=min-zoom&content-scaling=fixed&page-id=0%3A1&starting-point-node-id=13%3A1131&show-proto-sidebar=1) |
+| 3 | Log an Encounter | [View Prototype](https://www.figma.com/proto/fMSSNhPwYLewJWLDsA64DJ/Stellar?node-id=13-1305&p=f&t=oXRhEZQ2VCN0s8YL-9&scaling=min-zoom&content-scaling=fixed&page-id=0%3A1&starting-point-node-id=13%3A1305&show-proto-sidebar=1) |
+| 4 | Create and Confirm a Payment | [View Prototype](https://www.figma.com/proto/fMSSNhPwYLewJWLDsA64DJ/Stellar?node-id=5-844&p=f&t=oXRhEZQ2VCN0s8YL-9&scaling=min-zoom&content-scaling=fixed&page-id=0%3A1&starting-point-node-id=5%3A844&show-proto-sidebar=1) |
+| 5 | Password Reset | [View Prototype](https://www.figma.com/proto/fMSSNhPwYLewJWLDsA64DJ/Stellar?node-id=40-470&p=f&t=oXRhEZQ2VCN0s8YL-1&scaling=min-zoom&content-scaling=fixed&page-id=0%3A1&starting-point-node-id=40%3A470&show-proto-sidebar=1) |
