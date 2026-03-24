@@ -21,7 +21,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <Navbar />
-          {children}
+          <div id="main-content" tabIndex={-1}>
+            {children}
+          </div>
         </NextIntlClientProvider>
       </body>
     </html>
