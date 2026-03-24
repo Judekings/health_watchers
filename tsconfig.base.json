@@ -6,6 +6,11 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "@api/*": ["apps/api/src/*"],
+      "@web/*": ["apps/web/src/*"]
+    }
   }
 }
