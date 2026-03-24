@@ -1,7 +1,13 @@
+import { useTranslations } from "next-intl";
 import { PageWrapper, PageHeader } from '@/components/ui'
 
 export default function HomePage() {
+  const t = useTranslations("home");
   return (
+    <main style={{ fontFamily: "sans-serif", padding: "2rem" }}>
+      <h1>{t("title")}</h1>
+      <p>{t("subtitle")}</p>
+    </main>
     <PageWrapper className="py-8">
       <PageHeader 
         title="Health Watchers"
