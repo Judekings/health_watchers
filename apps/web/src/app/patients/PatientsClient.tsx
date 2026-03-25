@@ -40,9 +40,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
   const handleSearch = (value: string) => {
     setSearchQuery(value);
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => {
-      // Query will automatically refetch due to queryKey change
-    }, 300);
+    debounceTimer.current = setTimeout(() => {}, 300);
   };
 
   return (
@@ -59,16 +57,13 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         />
       </div>
       {isLoading ? (
-        <p role="status" aria-live="polite" className="text-gray-500">
-          {labels.loading}
-        </p>
+        <p role="status" aria-live="polite" className="text-gray-500">{labels.loading}</p>
       ) : error ? (
         <ErrorMessage message={error instanceof Error ? error.message : "Failed to load patients."} onRetry={() => window.location.reload()} />
       ) : patients.length === 0 ? (
         <p role="status" className="text-gray-500">{labels.empty}</p>
       ) : (
         <>
-          {/* Card layout on mobile */}
           <div className="md:hidden flex flex-col gap-4">
             {patients.map((p: Patient) => (
               <div key={p._id} className="rounded border border-gray-200 p-4 shadow-sm">
@@ -89,7 +84,6 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
             ))}
           </div>
 
-          {/* Table on md+ */}
           <div className="hidden md:block overflow-x-auto">
             <table aria-label={labels.title} className="w-full border-collapse text-sm">
               <thead>
