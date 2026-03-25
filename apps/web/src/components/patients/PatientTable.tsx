@@ -10,6 +10,7 @@ export interface Patient {
   dateOfBirth: string | Date
   gender: 'male' | 'female' | 'other'
   phone?: string
+  address?: string
   status?: 'active' | 'inactive'
   createdAt?: string
 }
