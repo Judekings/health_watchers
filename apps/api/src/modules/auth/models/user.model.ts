@@ -9,6 +9,7 @@ export interface User {
   role: AppRole; clinicId: Types.ObjectId; isActive: boolean;
   mfaEnabled: boolean; mfaSecret?: string;
   resetPasswordTokenHash?: string; resetPasswordExpiresAt?: Date;
+  failedLoginAttempts: number; lockedUntil?: Date;             // brute-force protection
 }
 
 const userSchema = new Schema({
@@ -22,6 +23,8 @@ const userSchema = new Schema({
   mfaSecret:  { type: String, required: false, select: false, default: undefined },
   resetPasswordTokenHash: { type: String, required: false, select: false, default: undefined },
   resetPasswordExpiresAt: { type: Date,   required: false, select: false, default: undefined, index: true },
+  failedLoginAttempts:    { type: Number, required: false, default: 0 },
+  lockedUntil:            { type: Date,   required: false, default: undefined, index: true },
 }, { timestamps: true, versionKey: false });
 
 userSchema.pre('save', async function () {
