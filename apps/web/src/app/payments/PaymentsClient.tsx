@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { ErrorMessage } from "@/components/ui";
+import { getStellarExplorerUrl } from "@/lib/stellar";
 
 interface Payment {
   id: string;
@@ -71,7 +72,7 @@ export default function PaymentsClient({ labels }: { labels: Labels }) {
               {p.txHash && (
                 <div className="mt-3 text-sm">
                   <a
-                    href={`https://stellar.expert/explorer/testnet/tx/${p.txHash}`}
+                    href={getStellarExplorerUrl(p.txHash, process.env.NEXT_PUBLIC_STELLAR_NETWORK || 'testnet')}
                     target="_blank"
                     rel="noreferrer"
                     aria-label={`${labels.view} transaction on Stellar Explorer (opens in new tab)`}
