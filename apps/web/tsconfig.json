@@ -12,11 +12,8 @@
     "rootDir": ".",
     "baseUrl": ".",
     "paths": {
-<<<<<<< feat/tsconfig-path-aliases
-      "@web/*": ["src/*"]
-=======
       "@/*": ["./src/*"]
->>>>>>> main
+
     },
     "allowJs": true,
     "noEmit": true,
