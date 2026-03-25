@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { type Patient, formatDate } from "@health-watchers/types";
 import { ErrorMessage } from "@/components/ui";
+import { queryKeys } from "@/lib/queryKeys";
 
 interface Encounter {
   _id: string;
@@ -22,35 +23,35 @@ interface Labels {
 }
 
 export default function PatientDetailClient({ patientId, labels }: { patientId: string; labels: Labels }) {
-  const [patient, setPatient] = useState<Patient | null>(null);
-  const [encounters, setEncounters] = useState<Encounter[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: patient, isLoading: patientLoading, error: patientError } = useQuery({
+    queryKey: queryKeys.patients.detail(patientId),
+    queryFn: async () => {
+      const res = await fetch(`http://localhost:3001/api/v1/patients/${patientId}`);
+      if (!res.ok) throw new Error("Failed to load patient");
+      const data = await res.json();
+      return data.data;
+    },
+  });
 
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    Promise.all([
-      fetch(`http://localhost:3001/api/v1/patients/${patientId}`).then(r => r.json()),
-      fetch(`http://localhost:3001/api/v1/encounters/patient/${patientId}`).then(r => r.json()),
-    ])
-      .then(([patientRes, encountersRes]) => {
-        setPatient(patientRes.data);
-        setEncounters(encountersRes.data || []);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message || "Failed to load patient details.");
-        setLoading(false);
-      });
-  }, [patientId]);
+  const { data: encounters = [], isLoading: encountersLoading, error: encountersError } = useQuery({
+    queryKey: queryKeys.encounters.byPatient(patientId),
+    queryFn: async () => {
+      const res = await fetch(`http://localhost:3001/api/v1/encounters/patient/${patientId}`);
+      if (!res.ok) throw new Error("Failed to load encounters");
+      const data = await res.json();
+      return data.data || [];
+    },
+  });
 
-  if (loading) {
+  const isLoading = patientLoading || encountersLoading;
+  const error = patientError || encountersError;
+
+  if (isLoading) {
     return <p className="px-4 py-8 text-gray-500">{labels.loading}</p>;
   }
 
   if (error || !patient) {
-    return <ErrorMessage message={error || labels.error} onRetry={() => window.location.reload()} />;
+    return <ErrorMessage message={error instanceof Error ? error.message : labels.error} onRetry={() => window.location.reload()} />;
   }
 
   return (
@@ -91,7 +92,7 @@ export default function PatientDetailClient({ patientId, labels }: { patientId: 
           <p className="text-gray-500">{labels.noEncounters}</p>
         ) : (
           <div className="space-y-4">
-            {encounters.map((e) => (
+            {encounters.map((e: Encounter) => (
               <div key={e._id} className="bg-white rounded border border-gray-200 p-4">
                 <p className="text-xs text-gray-500 uppercase font-semibold">Chief Complaint</p>
                 <p className="text-gray-900 font-medium">{e.chiefComplaint}</p>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ErrorMessage } from "@/components/ui";
 import { getStellarExplorerUrl } from "@/lib/stellar";
+import { queryKeys } from "@/lib/queryKeys";
 
 interface Payment {
   id: string;
@@ -24,25 +25,17 @@ interface Labels {
 }
 
 export default function PaymentsClient({ labels }: { labels: Labels }) {
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: payments = [], isLoading, error } = useQuery({
+    queryKey: queryKeys.payments.list(),
+    queryFn: async () => {
+      const res = await fetch("http://localhost:3001/api/v1/payments");
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const data = await res.json();
+      return data.data || data || [];
+    },
+  });
 
-  const fetchPayments = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    fetch("http://localhost:3001/api/v1/payments")
-      .then((res) => {
-        if (!res.ok) throw new Error(`Request failed (${res.status})`);
-        return res.json();
-      })
-      .then((data) => { setPayments(data.data || data || []); setLoading(false); })
-      .catch((err) => { setError(err.message || "Failed to load payments."); setLoading(false); });
-  }, []);
-
-  useEffect(() => { fetchPayments(); }, [fetchPayments]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <p role="status" aria-live="polite" className="px-4 py-8 text-gray-500">
         {labels.loading}
@@ -51,7 +44,7 @@ export default function PaymentsClient({ labels }: { labels: Labels }) {
   }
 
   if (error) {
-    return <ErrorMessage message={error} onRetry={fetchPayments} />;
+    return <ErrorMessage message={error instanceof Error ? error.message : "Failed to load payments."} onRetry={() => window.location.reload()} />;
   }
 
   return (
@@ -61,7 +54,7 @@ export default function PaymentsClient({ labels }: { labels: Labels }) {
         <p role="status" className="text-gray-500">{labels.empty}</p>
       ) : (
         <ul aria-label={labels.title} className="flex flex-col gap-4 list-none p-0 m-0">
-          {payments.map((p) => (
+          {payments.map((p: Payment) => (
             <li key={p.id} className="rounded border border-gray-200 p-4 shadow-sm">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
                 <div><p className="text-xs text-gray-500 uppercase">{labels.id}</p><p className="font-medium break-all">{p.id}</p></div>
