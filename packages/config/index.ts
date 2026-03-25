@@ -2,12 +2,10 @@ import dotenv from "dotenv";
 import path from "path";
 import { validateStartupSecrets, logSecretsStatus } from "./secrets-validator";
 
-// Load .env file in development
 if (process.env.NODE_ENV !== "production") {
   dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 }
 
-// Validate all required secrets are present
 validateStartupSecrets();
 
 const network = process.env.STELLAR_NETWORK || "testnet";
@@ -44,7 +42,6 @@ export const config = {
   geminiApiKey: process.env.GEMINI_API_KEY || "",
 };
 
-// Log secrets status (without revealing values)
 if (["development", "staging"].includes(process.env.NODE_ENV || "development")) {
   logSecretsStatus();
 }
