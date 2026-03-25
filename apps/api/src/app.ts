@@ -1,10 +1,11 @@
 import express from "express";
 import { config } from "@health-watchers/config";
-import authRoutes from "./modules/auth/auth.routes";
-import patientRoutes from "./modules/patients/patients.routes";
-import encounterRoutes from "./modules/encounters/encounters.routes";
-import paymentRoutes from "./modules/payments/payments.routes";
+import { authRoutes } from "./modules/auth/auth.controller";
+import { patientRoutes } from "./modules/patients/patients.controller";
+import { encounterRoutes } from "./modules/encounters/encounters.controller";
+import { paymentRoutes } from "./modules/payments/payments.controller";
 import aiRoutes from "./modules/ai/ai.routes";
+import { setupSwagger } from "./docs/swagger";
 
 const app = express();
 app.use(express.json());
@@ -16,6 +17,8 @@ app.use("/api/v1/patients", patientRoutes);
 app.use("/api/v1/encounters", encounterRoutes);
 app.use("/api/v1/payments", paymentRoutes);
 app.use("/api/v1/ai", aiRoutes);
+
+setupSwagger(app);
 
 app.listen(config.apiPort, () => {
   console.log(`Health Watchers API running on port ${config.apiPort}`);
