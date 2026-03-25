@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { ErrorMessage } from "@/components/ui";
 
 interface Encounter {
   id: string;
@@ -22,16 +23,32 @@ interface Labels {
 export default function EncountersClient({ labels }: { labels: Labels }) {
   const [encounters, setEncounters] = useState<Encounter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchEncounters = useCallback(() => {
+    setLoading(true);
+    setError(null);
     fetch("http://localhost:3001/api/v1/encounters")
-      .then((res) => res.json())
-      .then((data) => { setEncounters(data || []); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed (${res.status})`);
+        return res.json();
+      })
+      .then((data) => { setEncounters(data.data || data || []); setLoading(false); })
+      .catch((err) => { setError(err.message || "Failed to load encounters."); setLoading(false); });
   }, []);
 
+  useEffect(() => { fetchEncounters(); }, [fetchEncounters]);
+
   if (loading) {
-    return <p role="status" aria-live="polite" className="px-4 py-8 text-gray-500">{labels.loading}</p>;
+    return (
+      <p role="status" aria-live="polite" className="px-4 py-8 text-gray-500">
+        {labels.loading}
+      </p>
+    );
+  }
+
+  if (error) {
+    return <ErrorMessage message={error} onRetry={fetchEncounters} />;
   }
 
   return (

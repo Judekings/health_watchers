@@ -29,15 +29,15 @@ export const config = {
     refreshTokenSecret: process.env.JWT_REFRESH_TOKEN_SECRET || "",
   },
 
-  // Blockchain Configuration
+  // Blockchain Configuration (flat aliases kept for backward compat)
   stellarNetwork:    network,
   stellarHorizonUrl: horizonUrl,
   stellarSecretKey:  process.env.STELLAR_SECRET_KEY || "",
   stellar: {
     network,
     horizonUrl,
-    secretKey:         process.env.STELLAR_SECRET_KEY          || "",
-    platformPublicKey: process.env.STELLAR_PLATFORM_PUBLIC_KEY || "",
+    secretKey:         process.env.STELLAR_SECRET_KEY           || "",
+    platformPublicKey: process.env.STELLAR_PLATFORM_PUBLIC_KEY  || "",
   },
 
   // AI/LLM Configuration
