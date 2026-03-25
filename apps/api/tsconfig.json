@@ -3,7 +3,10 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["jest", "node"]
+    "baseUrl": ".",
+    "paths": {
+      "@api/*": ["src/*"]
+    }
   },
-  "include": ["src", "jest.setup.ts"]
+  "include": ["src"]
 }
