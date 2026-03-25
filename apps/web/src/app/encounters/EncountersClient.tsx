@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ErrorMessage } from "@/components/ui";
+import { queryKeys } from "@/lib/queryKeys";
 
 interface Encounter {
   id: string;
@@ -21,25 +22,17 @@ interface Labels {
 }
 
 export default function EncountersClient({ labels }: { labels: Labels }) {
-  const [encounters, setEncounters] = useState<Encounter[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: encounters = [], isLoading, error } = useQuery({
+    queryKey: queryKeys.encounters.list(),
+    queryFn: async () => {
+      const res = await fetch("http://localhost:3001/api/v1/encounters");
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const data = await res.json();
+      return data.data || data || [];
+    },
+  });
 
-  const fetchEncounters = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    fetch("http://localhost:3001/api/v1/encounters")
-      .then((res) => {
-        if (!res.ok) throw new Error(`Request failed (${res.status})`);
-        return res.json();
-      })
-      .then((data) => { setEncounters(data.data || data || []); setLoading(false); })
-      .catch((err) => { setError(err.message || "Failed to load encounters."); setLoading(false); });
-  }, []);
-
-  useEffect(() => { fetchEncounters(); }, [fetchEncounters]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <p role="status" aria-live="polite" className="px-4 py-8 text-gray-500">
         {labels.loading}
@@ -48,7 +41,7 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
   }
 
   if (error) {
-    return <ErrorMessage message={error} onRetry={fetchEncounters} />;
+    return <ErrorMessage message={error instanceof Error ? error.message : "Failed to load encounters."} onRetry={() => window.location.reload()} />;
   }
 
   return (
@@ -58,7 +51,7 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
         <p role="status" className="text-gray-500">{labels.empty}</p>
       ) : (
         <ul aria-label={labels.title} className="flex flex-col gap-4 list-none p-0 m-0">
-          {encounters.map((e) => (
+          {encounters.map((e: Encounter) => (
             <li key={e.id} className="rounded border border-gray-200 p-4 shadow-sm">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
                 <div><p className="text-xs text-gray-500 uppercase">{labels.id}</p><p className="font-medium">{e.id}</p></div>
