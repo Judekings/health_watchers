@@ -1,13 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { Request, Response, Router } from 'express';
-import { generateSecret, generateURI, verify as totpVerify } from 'otplib';
-import qrcode from 'qrcode';
-import { validateRequest } from '../../middlewares/validate.middleware';
-import { authenticate } from '../../middlewares/auth.middleware';
-import {
-  LoginDto, RefreshDto, MfaVerifyDto, MfaChallengeDto,
-  loginSchema, refreshSchema, mfaVerifySchema, mfaChallengeSchema,
-} from './auth.validation';
+import { validateRequest } from '@api/middlewares/validate.middleware';
+import { LoginDto, RefreshDto, loginSchema, refreshSchema } from './auth.validation';
 import { UserModel } from './models/user.model';
 import {
   signAccessToken, signRefreshToken, signTempToken,
@@ -21,7 +15,7 @@ const INVALID = 'Invalid email or password';
  * @swagger
  * /auth/login:
  *   post:
- *     summary: Authenticate with email and password
+ *     summary: Authenticate a user and obtain JWT tokens
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -31,40 +25,38 @@ const INVALID = 'Invalid email or password';
  *             type: object
  *             required: [email, password]
  *             properties:
- *               email:    { type: string, format: email }
- *               password: { type: string, minLength: 8 }
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 minLength: 8
  *     responses:
  *       200:
- *         description: Login successful (no MFA) or MFA challenge required
+ *         description: Login successful
  *         content:
  *           application/json:
  *             schema:
- *               oneOf:
- *                 - type: object
- *                   description: MFA not enabled — full tokens returned
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: object
  *                   properties:
- *                     status: { type: string, example: success }
- *                     data:
- *                       type: object
- *                       properties:
- *                         accessToken:  { type: string }
- *                         refreshToken: { type: string }
- *                 - type: object
- *                   description: MFA enabled — temp token returned for challenge
- *                   properties:
- *                     status: { type: string, example: mfa_required }
- *                     data:
- *                       type: object
- *                       properties:
- *                         mfaRequired: { type: boolean, example: true }
- *                         tempToken:   { type: string }
+ *                     accessToken:  { type: string }
+ *                     refreshToken: { type: string }
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
  *       401:
  *         description: Invalid credentials
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.post('/login', validateRequest({ body: loginSchema }), async (req: Request<Record<string, never>, unknown, LoginDto>, res: Response) => {
+router.post('/login', validateRequest({ body: loginSchema }), async (req: LoginReq, res: Response) => {
   const user = await UserModel.findOne({ email: req.body.email.toLowerCase().trim() });
   if (!user || !user.isActive) return res.status(401).json({ error: 'Unauthorized', message: INVALID });
   if (!await bcrypt.compare(req.body.password, user.password))
@@ -82,7 +74,7 @@ router.post('/login', validateRequest({ body: loginSchema }), async (req: Reques
  * @swagger
  * /auth/refresh:
  *   post:
- *     summary: Refresh an access token
+ *     summary: Refresh an access token using a refresh token
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -112,7 +104,7 @@ router.post('/login', validateRequest({ body: loginSchema }), async (req: Reques
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Error' }
  */
-router.post('/refresh', validateRequest({ body: refreshSchema }), async (req: Request<Record<string, never>, unknown, RefreshDto>, res: Response) => {
+router.post('/refresh', validateRequest({ body: refreshSchema }), async (req: RefreshReq, res: Response) => {
   const decoded = verifyRefreshToken(req.body.refreshToken);
   if (!decoded) return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
   const user = await UserModel.findById(decoded.userId);
