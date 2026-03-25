@@ -40,7 +40,6 @@ export default function EncountersPage() {
   return (
     <PageWrapper className="py-8">
       <PageHeader title="Encounters" />
-      
       <div className="space-y-4">
         {encounters.map(encounter => (
           <Card key={encounter.id}>
@@ -66,14 +65,12 @@ export default function EncountersPage() {
             </CardContent>
           </Card>
         ))}
-        
         {encounters.length === 0 && (
           <div className="text-center py-8">
-            <p className="text-secondary-600">No encounters found. API stub - implement full.</p>
+            <p className="text-secondary-600">No encounters found.</p>
           </div>
         )}
       </div>
     </PageWrapper>
   );
 }
-

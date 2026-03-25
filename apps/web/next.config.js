@@ -1,11 +1,16 @@
+const createNextIntlPlugin = require("next-intl/plugin");
+
+const withNextIntl = createNextIntlPlugin("./i18n.ts");
+
 /** @type {import('next').NextConfig} */
 const path = require('path');
 
 const nextConfig = {
   transpilePackages: ["@health-watchers/types"],
-  webpack(config) {
-    config.resolve.alias['@web'] = path.join(__dirname, 'src');
-    return config;
-  },
+  experimental: { missingSuspenseWithCSRBailout: false },
 };
-module.exports = nextConfig;
+
+// Disable Next.js lockfile patching (causes false yarn errors in npm monorepos)
+process.env.NEXT_DISABLE_LOCKFILE_PATCHING = '1';
+
+module.exports = withNextIntl(nextConfig);
