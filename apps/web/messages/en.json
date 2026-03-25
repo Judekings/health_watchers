@@ -12,9 +12,11 @@
     "title": "Patients",
     "loading": "Loading patients...",
     "empty": "No patients found.",
-    "id": "ID",
-    "name": "Name",
-    "dob": "Date of Birth"
+    "id": "System ID",
+    "name": "Full Name",
+    "dob": "Date of Birth",
+    "sex": "Sex",
+    "contact": "Contact"
   },
   "encounters": {
     "title": "Encounters",

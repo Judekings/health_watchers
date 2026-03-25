@@ -13,6 +13,14 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
   return res.status(201).json({ status: 'success', data: patient });
 });
 
+// GET /api/v1/patients
+router.get('/', authenticate, async (req: Request, res: Response) => {
+  const clinicId = req.user?.clinicId;
+  if (!clinicId) return res.status(401).json({ error: 'Unauthorized' });
+  const patients = await PatientModel.find({ clinicId }).sort({ lastName: 1, firstName: 1 });
+  return res.json({ status: 'success', data: patients });
+});
+
 // GET /api/v1/patients/search?q=
 router.get('/search', authenticate, async (req: Request, res: Response) => {
   const clinicId = req.user?.clinicId;
