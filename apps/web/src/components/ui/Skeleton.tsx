@@ -1,4 +1,4 @@
-import type { HTMLAttributes } from 'react';
+import type { HTMLAttributes } from "react";
 
 export interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
   /** Convenience shorthand for rounded-full (e.g. avatar skeletons) */
@@ -10,10 +10,10 @@ export function Skeleton({ circle, className, ...props }: SkeletonProps) {
     <div
       aria-hidden="true"
       className={[
-        'animate-pulse bg-neutral-200',
-        circle ? 'rounded-full' : 'rounded-md',
-        className ?? '',
-      ].join(' ')}
+        "animate-pulse bg-neutral-200",
+        circle ? "rounded-full" : "rounded-md",
+        className ?? "",
+      ].join(" ")}
       {...props}
     />
   );
@@ -22,7 +22,13 @@ export function Skeleton({ circle, className, ...props }: SkeletonProps) {
 /**
  * Table skeleton loader showing 5 rows with columns
  */
-export function TableSkeleton({ columns = 6, rows = 5 }: { columns?: number; rows?: number }) {
+export function TableSkeleton({
+  columns = 6,
+  rows = 5,
+}: {
+  columns?: number;
+  rows?: number;
+}) {
   return (
     <div className="w-full overflow-x-auto rounded-lg border border-neutral-200">
       <table className="w-full text-sm">
@@ -56,7 +62,12 @@ export function TableSkeleton({ columns = 6, rows = 5 }: { columns?: number; row
  */
 export function CardSkeleton({ className }: { className?: string }) {
   return (
-    <div className={['bg-neutral-0 rounded-lg border border-neutral-200 shadow-sm p-6', className ?? ''].join(' ')}>
+    <div
+      className={[
+        "bg-neutral-0 rounded-lg border border-neutral-200 shadow-sm p-6",
+        className ?? "",
+      ].join(" ")}
+    >
       <div className="flex items-center gap-4">
         <Skeleton circle className="h-12 w-12 shrink-0" />
         <div className="flex-1 space-y-2">
