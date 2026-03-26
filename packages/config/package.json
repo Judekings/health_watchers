@@ -1,5 +1,10 @@
 {
   "name": "@health-watchers/config",
   "version": "1.0.0",
-  "main": "index.ts"
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  }
 }
