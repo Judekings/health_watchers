@@ -25,6 +25,8 @@ export const config = {
   jwt: {
     accessTokenSecret:  process.env.JWT_ACCESS_TOKEN_SECRET  || "",
     refreshTokenSecret: process.env.JWT_REFRESH_TOKEN_SECRET || "",
+    issuer:             process.env.JWT_ISSUER               || "health-watchers-api",
+    audience:           process.env.JWT_AUDIENCE             || "health-watchers-client",
   },
 
   // Blockchain Configuration (flat aliases kept for backward compat)
@@ -40,6 +42,9 @@ export const config = {
 
   // AI/LLM Configuration
   geminiApiKey: process.env.GEMINI_API_KEY || "",
+
+  // PHI Field-Level Encryption
+  fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY || "",
 };
 
 if (["development", "staging"].includes(process.env.NODE_ENV || "development")) {
