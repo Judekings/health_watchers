@@ -1,6 +1,8 @@
 {
   "name": "api",
   "version": "1.0.0",
+  "description": "Backend API service for Health Watchers healthcare management platform",
+  "license": "MIT",
   "scripts": {
     "dev": "ts-node-dev --respawn -r tsconfig-paths/register src/app.ts",
     "build": "tsc",

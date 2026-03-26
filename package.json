@@ -1,6 +1,22 @@
 {
   "name": "health-watchers",
+  "version": "1.0.0",
+  "description": "A comprehensive healthcare management platform for patient records, encounters, and payments with Stellar blockchain integration",
   "private": true,
+  "license": "MIT",
+  "author": "Health Watchers Team",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Health-watchers/health_watchers.git"
+  },
+  "keywords": [
+    "healthcare",
+    "patient-management",
+    "stellar",
+    "blockchain",
+    "medical-records",
+    "monorepo"
+  ],
   "packageManager": "npm@10.9.2",
   "workspaces": [
     "apps/*",
