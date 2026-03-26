@@ -4,6 +4,7 @@ import { authRoutes } from "./modules/auth/auth.controller";
 import { patientRoutes } from "./modules/patients/patients.controller";
 import { encounterRoutes } from "./modules/encounters/encounters.controller";
 import { paymentRoutes } from "./modules/payments/payments.controller";
+import { auditRoutes } from "./modules/audit/audit.controller";
 import aiRoutes from "./modules/ai/ai.routes";
 import { setupSwagger } from "./docs/swagger";
 import dashboardRoutes from "./modules/dashboard/dashboard.routes";
@@ -21,6 +22,7 @@ app.use("/api/v1/encounters", encounterRoutes);
 app.use("/api/v1/payments", paymentRoutes);
 app.use("/api/v1/ai", aiRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
+app.use("/api/v1/audit-logs", auditRoutes);
 
 setupSwagger(app);
 
