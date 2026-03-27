@@ -6,6 +6,7 @@ import { objectIdSchema } from '@api/middlewares/objectid.schema';
 import { createPaymentIntentSchema } from './payments.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { toPaymentResponse } from './payments.transformer';
+import { config } from '@health-watchers/config';
 
 const router = Router();
 
@@ -19,6 +20,8 @@ router.post(
       clinicId: clinicId || 'default',
       patientId,
       status: 'pending',
+      assetCode: normalizedAsset,
+      assetIssuer: normalizedAsset === 'XLM' ? null : issuer,
     });
     res.status(201).json({
       status: 'success',
