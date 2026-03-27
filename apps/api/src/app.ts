@@ -1,5 +1,7 @@
 import express from "express";
+import pinoHttp from "pino-http";
 import { config } from "@health-watchers/config";
+import logger from "./utils/logger";
 import { authRoutes } from "./modules/auth/auth.controller";
 import { patientRoutes } from "./modules/patients/patients.controller";
 import { encounterRoutes } from "./modules/encounters/encounters.controller";
@@ -10,6 +12,7 @@ import dashboardRoutes from "./modules/dashboard/dashboard.routes";
 import { clinicRoutes } from "./modules/clinics/clinics.controller";
 
 const app = express();
+app.use(pinoHttp({ logger }));
 app.use(express.json());
 
 app.get("/health", (_req, res) =>
@@ -27,7 +30,7 @@ app.use("/api/v1/clinics", clinicRoutes);
 setupSwagger(app);
 
 app.listen(config.apiPort, () => {
-  console.log(`Health Watchers API running on port ${config.apiPort}`);
+  logger.info(`Health Watchers API running on port ${config.apiPort}`);
 });
 
 export default app;
