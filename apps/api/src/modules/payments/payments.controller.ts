@@ -4,11 +4,14 @@ import { PaymentRecordModel } from './models/payment-record.model';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { objectIdSchema } from '@api/middlewares/objectid.schema';
+import { createPaymentIntentSchema, confirmPaymentSchema } from './payments.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { createPaymentIntentSchema, listPaymentsQuerySchema, ListPaymentsQuery } from './payments.validation';
 import { toPaymentResponse } from './payments.transformer';
 import { AppRole } from '@api/types/express';
 import { config } from '@health-watchers/config';
+import { stellarClient } from './services/stellar-client';
+import logger from '@api/utils/logger';
 
 const router = Router();
 router.use(authenticate);
@@ -58,7 +61,12 @@ router.post(
       intentId, amount, destination, memo,
       clinicId: req.user!.clinicId,
     const {
-      intentId, amount, destination, memo, clinicId, patientId,
+      intentId,
+      amount,
+      destination,
+      memo,
+      clinicId,
+      patientId,
       assetCode = 'XLM',
       issuer,
     } = req.body;
@@ -100,11 +108,158 @@ router.post(
   }),
 );
 
+/**
+ * POST /payments/confirm
+ * Confirm a payment by verifying the on-chain transaction.
+ *
+ * Accepts: { intentId: string, txHash: string }
+ *
+ * Verifies:
+ * - Transaction exists on Stellar blockchain
+ * - Destination address matches
+ * - Amount matches
+ * - Asset code matches
+ *
+ * Updates payment status to 'confirmed' or 'failed'
+ */
+router.post(
+  '/confirm',
+  validateRequest({ body: confirmPaymentSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { intentId, txHash } = req.body;
+
+    // Find the payment intent
+    const payment = await PaymentRecordModel.findOne({ intentId });
+    if (!payment) {
+      return res.status(404).json({
+        error: 'NotFound',
+        message: `Payment intent '${intentId}' not found`,
+      });
+    }
+
+    // Check if already confirmed
+    if (payment.status === 'confirmed') {
+      return res.status(400).json({
+        error: 'AlreadyConfirmed',
+        message: 'This payment has already been confirmed',
+      });
+    }
+
+    // Check if already failed
+    if (payment.status === 'failed') {
+      return res.status(400).json({
+        error: 'AlreadyFailed',
+        message: 'This payment has already failed',
+      });
+    }
+
+    // Verify transaction on Stellar blockchain
+    const verification = await stellarClient.verifyTransaction(txHash);
+
+    if (!verification.found || !verification.transaction) {
+      // Transaction not found on-chain - mark as failed
+      await PaymentRecordModel.findByIdAndUpdate(payment._id, {
+        status: 'failed',
+        txHash,
+      });
+
+      return res.status(400).json({
+        error: 'TransactionNotFound',
+        message: verification.error || 'Transaction not found on Stellar blockchain',
+      });
+    }
+
+    const tx = verification.transaction;
+
+    // Verify destination matches
+    if (tx.to.toLowerCase() !== payment.destination.toLowerCase()) {
+      await PaymentRecordModel.findByIdAndUpdate(payment._id, {
+        status: 'failed',
+        txHash,
+      });
+
+      return res.status(400).json({
+        error: 'DestinationMismatch',
+        message: `Transaction destination ${tx.to} does not match expected ${payment.destination}`,
+      });
+    }
+
+    // Verify amount matches (compare as strings to avoid floating point issues)
+    // Normalize both amounts to the same precision for comparison
+    const expectedAmount = parseFloat(payment.amount).toFixed(7);
+    const txAmount = parseFloat(tx.amount).toFixed(7);
+
+    if (txAmount !== expectedAmount) {
+      await PaymentRecordModel.findByIdAndUpdate(payment._id, {
+        status: 'failed',
+        txHash,
+      });
+
+      return res.status(400).json({
+        error: 'AmountMismatch',
+        message: `Transaction amount ${tx.amount} does not match expected ${payment.amount}`,
+      });
+    }
+
+    // Verify asset code matches
+    const txAssetCode = tx.asset.split(':')[0].toUpperCase();
+    const expectedAssetCode = payment.assetCode.toUpperCase();
+
+    if (txAssetCode !== expectedAssetCode) {
+      await PaymentRecordModel.findByIdAndUpdate(payment._id, {
+        status: 'failed',
+        txHash,
+      });
+
+      return res.status(400).json({
+        error: 'AssetMismatch',
+        message: `Transaction asset ${tx.asset} does not match expected ${payment.assetCode}`,
+      });
+    }
+
+    // All verifications passed - confirm the payment
+    const updatedPayment = await PaymentRecordModel.findByIdAndUpdate(
+      payment._id,
+      {
+        status: 'confirmed',
+        txHash,
+      },
+      { new: true },
+    );
+
+    logger.info({
+      event: 'payment_confirmed',
+      intentId,
+      txHash,
+      amount: payment.amount,
+      assetCode: payment.assetCode,
+    });
+
+    res.json({
+      status: 'success',
+      message: 'Payment confirmed successfully',
+      data: toPaymentResponse(updatedPayment!),
+    });
+  }),
+);
+
 router.get(
   '/:id',
   validateRequest({ params: objectIdSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const payment = await PaymentRecordModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId }).lean();
+  '/',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const payments = await PaymentRecordModel.find().sort({ createdAt: -1 });
+    res.json({ status: 'success', data: payments.map(toPaymentResponse) });
+  }),
+);
+
+router.get(
+  '/:id',
+  validateRequest({ params: objectIdSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const payment = await PaymentRecordModel.findById(req.params.id);
     if (!payment) return res.status(404).json({ error: 'NotFound', message: 'Payment not found' });
     res.json({ status: 'success', data: toPaymentResponse(payment) });
   }),
