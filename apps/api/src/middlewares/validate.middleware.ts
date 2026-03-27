@@ -14,7 +14,7 @@ export function validateRequest(schemas: ValidateOptions) {
       if (!result.success) {
         return res.status(400).json({
           error: 'ValidationError',
-          message: result.error.errors.map((e) => e.message).join(', '),
+          issues: result.error.issues,
         });
       }
       (req as any)[key] = result.data;

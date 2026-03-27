@@ -1,33 +1,34 @@
 import { Router, Request, Response } from 'express';
 import { PaymentRecordModel } from './models/payment-record.model';
 import { toPaymentResponse } from './payments.transformer';
+import { asyncHandler } from '../../utils/asyncHandler';
+import { validateRequest } from '../../middlewares/validate.middleware';
+import { createPaymentSchema, paymentIdParamSchema } from './payments.validation';
 
 const router = Router();
 
 // GET /payments
-router.get('/', async (_req: Request, res: Response) => {
-  try {
-    const docs = await PaymentRecordModel.find().sort({ createdAt: -1 });
-    return res.json({ status: 'success', data: docs.map(toPaymentResponse) });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
-  }
-});
+router.get('/', asyncHandler(async (_req: Request, res: Response) => {
+  const docs = await PaymentRecordModel.find().sort({ createdAt: -1 });
+  return res.json({ status: 'success', data: docs.map(toPaymentResponse) });
+}));
 
 // GET /payments/:id
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get(
+  '/:id',
+  validateRequest({ params: paymentIdParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
     const doc = await PaymentRecordModel.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Payment not found' });
     return res.json({ status: 'success', data: toPaymentResponse(doc) });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
-  }
-});
+  })
+);
 
 // POST /payments/intent
-router.post('/intent', async (req: Request, res: Response) => {
-  try {
+router.post(
+  '/intent',
+  validateRequest({ body: createPaymentSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
     const { intentId, amount, destination, memo, clinicId, patientId } = req.body;
     const doc = await PaymentRecordModel.create({
       intentId, amount, destination, memo,
@@ -36,9 +37,7 @@ router.post('/intent', async (req: Request, res: Response) => {
       status: 'pending',
     });
     return res.status(201).json({ status: 'success', data: toPaymentResponse(doc) });
-  } catch (err: any) {
-    return res.status(400).json({ error: 'BadRequest', message: err.message });
-  }
-});
+  })
+);
 
 export const paymentRoutes = router;
