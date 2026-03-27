@@ -33,7 +33,7 @@ router.post('/', validateRequest({ body: createPatientSchema }), async (req: Req
 
 router.get('/', async (req: Request, res: Response) => {
   const { q, page = '1', limit = '20' } = req.query as Record<string, string>;
-  const filter: Record<string, unknown> = { clinicId: req.user!.clinicId };
+  const filter: Record<string, unknown> = { clinicId: req.user!.clinicId, isActive: true };
   if (q) filter.searchName = { $regex: q.toLowerCase(), $options: 'i' };
 
   const skip = (Number(page) - 1) * Number(limit);
@@ -42,6 +42,16 @@ router.get('/', async (req: Request, res: Response) => {
     PatientModel.countDocuments(filter),
   ]);
   return res.json({ status: 'success', data: patients, meta: { total, page: Number(page), limit: Number(limit) } });
+});
+
+router.get('/search', async (req: Request, res: Response) => {
+  const q = String(req.query.q || '').toLowerCase().trim();
+  const docs = await PatientModel.find({
+    clinicId: req.user!.clinicId,
+    isActive: true,
+    searchName: { $regex: q, $options: 'i' },
+  }).sort({ createdAt: -1 });
+  return res.json({ status: 'success', data: docs });
 });
 
 router.get('/:id', async (req: Request, res: Response) => {

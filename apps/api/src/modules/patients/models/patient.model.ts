@@ -14,6 +14,7 @@ export interface Patient {
   contactNumber?: string;
   address?: string;
   clinicId: Schema.Types.ObjectId;
+  isActive: boolean;
 }
 
 const patientSchema = new Schema<Patient>(
@@ -27,6 +28,7 @@ const patientSchema = new Schema<Patient>(
     contactNumber: { type: String },
     address:       { type: String },
     clinicId:      { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
+    isActive:      { type: Boolean, default: true, index: true },
   },
   { timestamps: true, versionKey: false }
 );

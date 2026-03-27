@@ -14,6 +14,7 @@ import {
   signAccessToken, signRefreshToken, signTempToken,
   verifyRefreshToken, verifyTempToken,
 } from './token.service';
+import { generateSecret, generateURI, totpVerify } from './totp.service';
 
 // ── local type helpers ────────────────────────────────────────────────────
 type LoginReq   = Request<Record<string, never>, unknown, LoginDto>;

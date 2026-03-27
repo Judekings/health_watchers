@@ -20,6 +20,6 @@ export function validateRequest(schemas: ValidateOptions) {
       }
       (req as Record<string, unknown>)[key] = result.data;
     }
-    next();
+    return next();
   };
 }
