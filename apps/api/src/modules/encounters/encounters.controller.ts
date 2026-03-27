@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { EncounterModel } from './encounter.model';
+import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import {
   createEncounterSchema,
@@ -12,6 +13,41 @@ import { toEncounterResponse } from './encounters.transformer';
 import { paginate, parsePagination } from '@api/utils/paginate';
 
 const router = Router();
+router.use(authenticate);
+
+// GET /encounters — paginated list scoped to the authenticated clinic
+router.get(
+  '/',
+  validateRequest({ query: listEncountersQuerySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { patientId, doctorId, status, date, page, limit } = req.query as unknown as ListEncountersQuery;
+
+    const filter: Record<string, unknown> = { clinicId: req.user!.clinicId };
+
+    if (patientId) filter.patientId         = patientId;
+    if (doctorId)  filter.attendingDoctorId = doctorId;
+    if (status)    filter.status            = status;
+
+    if (date) {
+      const start = new Date(date);
+      const end   = new Date(date);
+      end.setUTCDate(end.getUTCDate() + 1);
+      filter.createdAt = { $gte: start, $lt: end };
+    }
+
+    const skip = (page - 1) * limit;
+    const [encounters, total] = await Promise.all([
+      EncounterModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      EncounterModel.countDocuments(filter),
+    ]);
+
+    res.json({
+      status: 'success',
+      data: encounters.map(toEncounterResponse),
+      meta: { total, page, limit },
+    });
+  }),
+);
 
 // GET /encounters
 router.get(
