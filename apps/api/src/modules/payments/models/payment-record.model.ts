@@ -7,6 +7,7 @@ export interface PaymentRecord {
   memo?: string;
   status: 'pending' | 'confirmed' | 'failed';
   txHash?: string;
+  confirmedAt?: Date;
   clinicId: string;
   patientId?: string;
 }
@@ -19,6 +20,7 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     memo:        { type: String },
     status:      { type: String, enum: ['pending', 'confirmed', 'failed'], default: 'pending' },
     txHash:      { type: String },
+    confirmedAt: { type: Date },
     clinicId:    { type: String, required: true, index: true },
     patientId:   { type: String, index: true },
   },
