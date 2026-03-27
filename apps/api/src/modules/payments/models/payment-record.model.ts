@@ -23,6 +23,8 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     confirmedAt: { type: Date },
     clinicId:    { type: String, required: true, index: true },
     patientId:   { type: String, index: true },
+    assetCode:   { type: String, required: true, default: 'XLM', uppercase: true, trim: true },
+    assetIssuer: { type: String, default: null }, // null for native XLM
   },
   { timestamps: true, versionKey: false },
 );

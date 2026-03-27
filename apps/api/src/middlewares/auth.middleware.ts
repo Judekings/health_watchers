@@ -14,3 +14,12 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   req.user = payload as typeof req.user;
   return next();
 }
+
+export function requireRoles(...roles: AppRole[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
+    }
+    return next();
+  };
+}

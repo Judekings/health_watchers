@@ -51,8 +51,8 @@ export const mfaChallengeSchema = z.object({
   totp:      z.string().length(6),
 });
 
-export type LoginDto        = z.infer<typeof loginSchema>;
-export type RegisterDto     = z.infer<typeof registerSchema>;
-export type RefreshDto      = z.infer<typeof refreshSchema>;
-export type MfaVerifyDto    = z.infer<typeof mfaVerifySchema>;
+export type LoginDto       = z.infer<typeof loginSchema>;
+export type RegisterDto    = z.infer<typeof registerSchema>;
+export type RefreshDto     = z.infer<typeof refreshSchema>;
+export type MfaVerifyDto   = z.infer<typeof mfaVerifySchema>;
 export type MfaChallengeDto = z.infer<typeof mfaChallengeSchema>;

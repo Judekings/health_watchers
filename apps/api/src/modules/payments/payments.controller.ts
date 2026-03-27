@@ -8,6 +8,7 @@ import { asyncHandler } from '@api/middlewares/async.handler';
 import { createPaymentIntentSchema, listPaymentsQuerySchema, ListPaymentsQuery } from './payments.validation';
 import { toPaymentResponse } from './payments.transformer';
 import { AppRole } from '@api/types/express';
+import { config } from '@health-watchers/config';
 
 const router = Router();
 router.use(authenticate);
@@ -56,9 +57,42 @@ router.post(
     const record = await PaymentRecordModel.create({
       intentId, amount, destination, memo,
       clinicId: req.user!.clinicId,
+    const {
+      intentId, amount, destination, memo, clinicId, patientId,
+      assetCode = 'XLM',
+      issuer,
+    } = req.body;
+
+    const normalizedAsset = String(assetCode).toUpperCase().trim();
+
+    // XLM is always supported natively; other assets must be in the allow-list
+    if (normalizedAsset !== 'XLM' && !config.supportedAssets.includes(normalizedAsset)) {
+      return res.status(400).json({
+        error: 'UnsupportedAsset',
+        message: `Asset '${normalizedAsset}' is not supported. Supported assets: ${config.supportedAssets.join(', ')}`,
+      });
+    }
+
+    // Non-native assets require an issuer account
+    if (normalizedAsset !== 'XLM' && !issuer) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: `An issuer address is required for non-native asset '${normalizedAsset}'`,
+      });
+    }
+
+    const record = await PaymentRecordModel.create({
+      intentId,
+      amount,
+      destination,
+      memo,
+      clinicId: clinicId || 'default',
       patientId,
       status: 'pending',
+      assetCode: normalizedAsset,
+      assetIssuer: normalizedAsset === 'XLM' ? null : issuer,
     });
+
     res.status(201).json({
       status: 'success',
       data: { ...toPaymentResponse(record), platformPublicKey: config.stellar.platformPublicKey },
