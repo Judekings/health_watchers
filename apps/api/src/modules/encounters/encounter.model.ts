@@ -87,6 +87,12 @@ const encounterSchema = new Schema<Encounter>(
     prescriptions:     { type: [prescriptionSchema], default: undefined },
     followUpDate:      { type: Date },
     aiSummary:         { type: String },
+    patientId:      { type: Schema.Types.ObjectId, ref: "Patient", required: true, index: true },
+    clinicId:       { type: Schema.Types.ObjectId, ref: "Clinic",  required: true, index: true },
+    chiefComplaint: { type: String, required: true },
+    notes:          { type: String },
+    treatmentPlan:  { type: String },
+    aiSummary:      { type: String },
   },
   { timestamps: true, versionKey: false }
 );
