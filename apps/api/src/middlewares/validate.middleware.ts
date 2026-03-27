@@ -19,7 +19,7 @@ export function validateRequest(schemas: ValidateOptions) {
         });
         return;
       }
-      (req as any)[key] = result.data;
+      (req as Record<string, unknown>)[key] = result.data;
     }
     next();
   };
