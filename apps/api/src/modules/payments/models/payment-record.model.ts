@@ -1,18 +1,26 @@
 import { Schema, model, models } from 'mongoose';
 
 export interface PaymentRecord {
-  patientId: Schema.Types.ObjectId;
+  intentId: string;
   amount: string;
-  status: 'pending' | 'completed' | 'failed';
-  stellarTxHash?: string;
+  destination: string;
+  memo?: string;
+  status: 'pending' | 'confirmed' | 'failed';
+  txHash?: string;
+  clinicId: string;
+  patientId?: string;
 }
 
 const paymentRecordSchema = new Schema<PaymentRecord>(
   {
-    patientId:      { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
-    amount:         { type: String, required: true },
-    status:         { type: String, enum: ['pending', 'completed', 'failed'], default: 'pending' },
-    stellarTxHash:  { type: String },
+    intentId:    { type: String, required: true, unique: true },
+    amount:      { type: String, required: true },
+    destination: { type: String, required: true },
+    memo:        { type: String },
+    status:      { type: String, enum: ['pending', 'confirmed', 'failed'], default: 'pending' },
+    txHash:      { type: String },
+    clinicId:    { type: String, required: true, index: true },
+    patientId:   { type: String, index: true },
   },
   { timestamps: true, versionKey: false },
 );

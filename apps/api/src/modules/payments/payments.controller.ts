@@ -5,6 +5,7 @@ import { validateRequest } from '@api/middlewares/validate.middleware';
 import { objectIdSchema } from '@api/middlewares/objectid.schema';
 import { createPaymentIntentSchema } from './payments.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
+import { toPaymentResponse } from './payments.transformer';
 
 const router = Router();
 
@@ -12,11 +13,16 @@ router.post(
   '/intent',
   validateRequest({ body: createPaymentIntentSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { patientId, amount } = req.body;
-    const record = await PaymentRecordModel.create({ patientId, amount, status: 'pending' });
+    const { intentId, amount, destination, memo, clinicId, patientId } = req.body;
+    const record = await PaymentRecordModel.create({
+      intentId, amount, destination, memo,
+      clinicId: clinicId || 'default',
+      patientId,
+      status: 'pending',
+    });
     res.status(201).json({
       status: 'success',
-      data: { recordId: record._id, platformPublicKey: config.stellar.platformPublicKey },
+      data: { ...toPaymentResponse(record), platformPublicKey: config.stellar.platformPublicKey },
     });
   }),
 );
@@ -24,8 +30,8 @@ router.post(
 router.get(
   '/',
   asyncHandler(async (_req: Request, res: Response) => {
-    const payments = await PaymentRecordModel.find().lean();
-    res.json({ status: 'success', data: payments });
+    const payments = await PaymentRecordModel.find().sort({ createdAt: -1 }).lean();
+    res.json({ status: 'success', data: payments.map(toPaymentResponse) });
   }),
 );
 
@@ -35,7 +41,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const payment = await PaymentRecordModel.findById(req.params.id).lean();
     if (!payment) return res.status(404).json({ error: 'NotFound', message: 'Payment not found' });
-    res.json({ status: 'success', data: payment });
+    res.json({ status: 'success', data: toPaymentResponse(payment) });
   }),
 );
 

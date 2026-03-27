@@ -1,6 +1,6 @@
 /**
  * Validates that all required environment variables are set.
- * Exits with code 1 if any are missing.
+ * Exits with code 1 if any are missing (all envs) or throws in production.
  */
 const REQUIRED_VARS = [
   'MONGO_URI',
@@ -13,7 +13,11 @@ const REQUIRED_VARS = [
 export function validateStartupSecrets(): void {
   const missing = REQUIRED_VARS.filter((key) => !process.env[key]);
   if (missing.length > 0) {
-    console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
+    const msg = `Missing required environment variables: ${missing.join(', ')}`;
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(msg);
+    }
+    console.error(`❌ ${msg}`);
     process.exit(1);
   }
 }
@@ -21,6 +25,6 @@ export function validateStartupSecrets(): void {
 export function logSecretsStatus(): void {
   for (const key of REQUIRED_VARS) {
     const set = Boolean(process.env[key]);
-    console.log(`  ${set ? '✅' : '❌'} ${key}`);
+    console.log(`  ${set ? '✅' : '⚠️  missing'} ${key}`);
   }
 }
