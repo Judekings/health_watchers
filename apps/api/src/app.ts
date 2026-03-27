@@ -1,5 +1,6 @@
 import http from "http";
 import express from "express";
+import mongoSanitize from "express-mongo-sanitize";
 import { config } from "@health-watchers/config";
 import { connectDB } from "./config/db";
 import { authRoutes } from "./modules/auth/auth.controller";
@@ -19,6 +20,9 @@ const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? "50kb";
 const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? "500kb";
 
 app.use(express.json({ limit: standardLimit }));
+
+// Sanitize req.body, req.query, req.params — replace $ and . to block NoSQL injection
+app.use(mongoSanitize({ replaceWith: "_" }));
 
 // Override limit for AI routes before the standard middleware applies
 app.use("/api/v1/ai", express.json({ limit: aiLimit }), aiRoutes);
