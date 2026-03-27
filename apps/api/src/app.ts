@@ -1,7 +1,7 @@
-import express, { Request, Response, NextFunction } from "express";
-import cors from "cors";
 import http from "http";
 import express from "express";
+import cors from "cors";
+import mongoSanitize from "express-mongo-sanitize";
 import { config } from "@health-watchers/config";
 import { connectDB } from "./config/db";
 import { authRoutes } from "./modules/auth/auth.controller";
@@ -30,7 +30,16 @@ app.use(
 );
 
 app.options("*", cors());
-app.use(express.json());
+
+// Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 50kb)
+const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? "50kb";
+// AI routes allow larger payloads for summarization (default 500kb)
+const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? "500kb";
+
+app.use(express.json({ limit: standardLimit }));
+
+// Sanitize req.body, req.query, req.params — replace $ and . to block NoSQL injection
+app.use(mongoSanitize({ replaceWith: "_" }));
 
 app.get("/health", (_req, res) =>
   res.json({ status: "ok", service: "health-watchers-api" })
@@ -40,19 +49,12 @@ app.use("/api/v1/auth",       authRoutes);
 app.use("/api/v1/patients",   patientRoutes);
 app.use("/api/v1/encounters", encounterRoutes);
 app.use("/api/v1/payments",   paymentRoutes);
-app.use("/api/v1/ai",         aiRoutes);
+// Override limit for AI routes
+app.use("/api/v1/ai",         express.json({ limit: aiLimit }), aiRoutes);
 app.use("/api/v1/dashboard",  dashboardRoutes);
 
 setupSwagger(app);
 
-// Global error handler
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  const status = err.status || err.statusCode || 500;
-  res.status(status).json({ error: "InternalError", message: err.message || "Something went wrong" });
-});
-
-app.listen(config.apiPort, () => {
-  console.log(`Health Watchers API running on port ${config.apiPort}`);
 // 404 handler
 app.use((_req, res) => {
   res.status(404).json({ error: "NotFound", message: "Route not found" });
