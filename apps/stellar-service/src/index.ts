@@ -73,3 +73,19 @@ app.listen(stellarConfig.port, () => {
     console.log("  ⚠️  Dry-run mode active — no transactions will be submitted");
   }
 });
+
+function shutdown(signal: string) {
+  logger.info({ signal }, 'Shutting down gracefully...');
+  server.close(() => {
+    logger.info('HTTP server closed');
+    process.exit(0);
+  });
+
+  setTimeout(() => {
+    logger.error('Shutdown timeout exceeded — forcing exit');
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));

@@ -42,8 +42,8 @@ app.use(express.json({ limit: standardLimit }));
 // Sanitize req.body, req.query, req.params — replace $ and . to block NoSQL injection
 app.use(mongoSanitize({ replaceWith: "_" }));
 
-app.get("/health", (_req, res) =>
-  res.json({ status: "ok", service: "health-watchers-api" })
+app.get('/health', (_req, res) =>
+  res.json({ status: 'ok', service: 'health-watchers-api' })
 );
 
 app.use("/api/v1/auth",       authRoutes);
@@ -57,9 +57,43 @@ app.use("/api/v1/appointments", appointmentRoutes);
 
 setupSwagger(app);
 
-// 404 handler
-app.use((_req, res) => {
-  res.status(404).json({ error: "NotFound", message: "Route not found" });
+async function start() {
+  await mongoose.connect(config.mongoUri);
+  logger.info('MongoDB connected');
+
+  const server = app.listen(config.apiPort, () => {
+    logger.info(`Health Watchers API running on port ${config.apiPort}`);
+  });
+
+  const SHUTDOWN_TIMEOUT_MS = Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 10000);
+
+  async function shutdown(signal: string) {
+    logger.info({ signal }, 'Shutting down gracefully...');
+    server.close(async () => {
+      logger.info('HTTP server closed');
+      try {
+        await mongoose.disconnect();
+        logger.info('MongoDB connection closed');
+        process.exit(0);
+      } catch (err) {
+        logger.error({ err }, 'Error closing MongoDB connection');
+        process.exit(1);
+      }
+    });
+
+    setTimeout(() => {
+      logger.error('Shutdown timeout exceeded — forcing exit');
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS).unref();
+  }
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+}
+
+start().catch((err) => {
+  logger.error({ err }, 'Failed to start API');
+  process.exit(1);
 });
 
 // Global error handler — must be last

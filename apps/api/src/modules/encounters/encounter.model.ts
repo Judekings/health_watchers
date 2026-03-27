@@ -32,6 +32,7 @@ export interface Encounter {
   chiefComplaint: string;
   status: "open" | "closed" | "follow-up";
   notes?: string;
+  diagnosis?: string;
   treatmentPlan?: string;
   diagnosis?: Diagnosis[];
   vitalSigns?: VitalSigns;
@@ -91,6 +92,7 @@ const encounterSchema = new Schema<Encounter>(
     clinicId:       { type: Schema.Types.ObjectId, ref: "Clinic",  required: true, index: true },
     chiefComplaint: { type: String, required: true },
     notes:          { type: String },
+    diagnosis:      { type: String },
     treatmentPlan:  { type: String },
     aiSummary:      { type: String },
   },
