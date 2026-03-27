@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import mongoSanitize from 'express-mongo-sanitize';
+import mongoose from 'mongoose';
 import { config } from '@health-watchers/config';
 import { connectDB } from './config/db';
 import { authRoutes } from './modules/auth/auth.controller';
@@ -12,6 +13,11 @@ import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
+import {
+  startPaymentExpirationJob,
+  stopPaymentExpirationJob,
+} from './modules/payments/services/payment-expiration-job';
+import logger from './utils/logger';
 
 const app = express();
 app.disable('x-powered-by');
@@ -55,25 +61,54 @@ app.use('/api/v1/appointments', appointmentRoutes);
 
 setupSwagger(app);
 
-app.all('*', (req, res) => {
-  res.status(404).json({
-    error: 'NotFound',
-    message: `Route ${req.method} ${req.path} not found`,
-  });
-});
-
+// Global error handler — must be last
 app.use(errorHandler);
 
-(async () => {
+async function start() {
   try {
     await connectDB();
-    app.listen(config.apiPort, () => {
-      console.log(`✅ Health Watchers API running on port ${config.apiPort}`);
+
+    // Start background jobs
+    startPaymentExpirationJob();
+
+    const server = app.listen(config.apiPort, () => {
+      logger.info(`Health Watchers API running on port ${config.apiPort}`);
     });
+
+    const SHUTDOWN_TIMEOUT_MS = Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 10000);
+
+    async function shutdown(signal: string) {
+      logger.info({ signal }, 'Shutting down gracefully...');
+
+      // Stop background jobs
+      stopPaymentExpirationJob();
+
+      server.close(async () => {
+        logger.info('HTTP server closed');
+        try {
+          await mongoose.disconnect();
+          logger.info('MongoDB connection closed');
+          process.exit(0);
+        } catch (err) {
+          logger.error({ err }, 'Error closing MongoDB connection');
+          process.exit(1);
+        }
+      });
+
+      setTimeout(() => {
+        logger.error('Shutdown timeout exceeded — forcing exit');
+        process.exit(1);
+      }, SHUTDOWN_TIMEOUT_MS).unref();
+    }
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   } catch (err) {
-    console.error('❌ Failed to start server:', err);
+    logger.error({ err }, 'Failed to start API');
     process.exit(1);
   }
-})();
+}
+
+start();
 
 export default app;
