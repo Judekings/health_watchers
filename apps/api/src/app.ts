@@ -12,6 +12,7 @@ import aiRoutes from "./modules/ai/ai.routes";
 import { setupSwagger } from "./docs/swagger";
 import dashboardRoutes from "./modules/dashboard/dashboard.routes";
 import { errorHandler } from "./middlewares/error.middleware";
+import { appointmentRoutes } from "./modules/appointments/appointments.controller";
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.use("/api/v1/payments",   paymentRoutes);
 // Override limit for AI routes
 app.use("/api/v1/ai",         express.json({ limit: aiLimit }), aiRoutes);
 app.use("/api/v1/dashboard",  dashboardRoutes);
+app.use("/api/v1/appointments", appointmentRoutes);
 
 setupSwagger(app);
 
