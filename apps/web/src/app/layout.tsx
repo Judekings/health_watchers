@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages, getLocale } from "next-intl/server";
-import Navbar from "../components/Navbar";
 import { ErrorBoundary } from "../components/ui/error-boundary";
 import { QueryProvider } from "@/lib/QueryProvider";
 import { RealtimeProvider } from "@/components/RealtimeProvider";
+import AppLayout from "@/components/layout/AppLayout";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,12 +28,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <NextIntlClientProvider locale={locale} messages={messages}>
           <QueryProvider>
             <RealtimeProvider>
-              <Navbar />
-              <div id="main-content" tabIndex={-1}>
-                <ErrorBoundary>
-                  {children}
-                </ErrorBoundary>
-              </div>
+              <AppLayout>
+                <div id="main-content" tabIndex={-1}>
+                  <ErrorBoundary>
+                    {children}
+                  </ErrorBoundary>
+                </div>
+              </AppLayout>
             </RealtimeProvider>
           </QueryProvider>
         </NextIntlClientProvider>
