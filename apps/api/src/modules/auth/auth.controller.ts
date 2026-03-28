@@ -7,7 +7,9 @@ import {
   LoginDto, RefreshDto, RegisterDto,
   loginSchema, refreshSchema, registerSchema, mfaVerifySchema, mfaChallengeSchema,
   MfaVerifyDto, MfaChallengeDto,
+  changePasswordSchema, ChangePasswordDto,
 } from './auth.validation';
+import { sendPasswordResetEmail } from '@api/lib/email.service';
 import { UserModel } from './models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import {
@@ -17,9 +19,10 @@ import {
 import { generateSecret, generateURI, totpVerify } from './totp.service';
 
 // ── local type helpers ────────────────────────────────────────────────────
-type LoginReq   = Request<Record<string, never>, unknown, LoginDto>;
-type RefreshReq = Request<Record<string, never>, unknown, RefreshDto>;
-type RegisterReq = Request<Record<string, never>, unknown, RegisterDto>;
+type LoginReq          = Request<Record<string, never>, unknown, LoginDto>;
+type RefreshReq        = Request<Record<string, never>, unknown, RefreshDto>;
+type RegisterReq       = Request<Record<string, never>, unknown, RegisterDto>;
+type ChangePasswordReq = Request<Record<string, never>, unknown, ChangePasswordDto>;
 
 const router = Router();
 const INVALID = 'Invalid email or password';
@@ -341,6 +344,52 @@ router.post('/register', validateRequest({ body: registerSchema }), async (req: 
 
   const user = await UserModel.create({ fullName, email, password, role, clinicId });
   return res.status(201).json({ status: 'success', data: { id: user.id, email: user.email, role: user.role } });
+});
+
+/**
+ * @swagger
+ * /auth/me/password:
+ *   patch:
+ *     summary: Change the authenticated user's password
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword, confirmPassword]
+ *             properties:
+ *               currentPassword: { type: string }
+ *               newPassword:     { type: string, minLength: 8 }
+ *               confirmPassword: { type: string }
+ *     responses:
+ *       200:
+ *         description: Password updated successfully
+ *       400:
+ *         description: Token invalid, expired, or already used
+ */
+router.post('/reset-password', validateRequest({ body: resetPasswordSchema }), async (req: Request<Record<string, never>, unknown, ResetPasswordDto>, res: Response) => {
+  const tokenHash = hashToken(req.body.token);
+
+  const user = await UserModel.findOne({ resetPasswordTokenHash: tokenHash })
+    .select('+resetPasswordTokenHash +resetPasswordExpiresAt');
+
+  if (!user || !user.resetPasswordExpiresAt || user.resetPasswordExpiresAt < new Date()) {
+    return res.status(400).json({ error: 'InvalidToken', message: 'Reset token is invalid or has expired' });
+  }
+
+  // Update password — pre-save hook will hash it
+  user.password = req.body.newPassword;
+  // Single-use: clear reset fields and invalidate any active sessions
+  user.resetPasswordTokenHash = undefined;
+  user.resetPasswordExpiresAt = undefined;
+  user.refreshTokenHash = undefined;
+  await user.save();
+
+  return res.json({ status: 'success', message: 'Password has been reset successfully' });
 });
 
 export const authRoutes = router;
