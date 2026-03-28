@@ -51,10 +51,10 @@ export async function getStats(req: Request, res: Response) {
         totalPatients,
       },
     });
-  } catch (error: any) {
+  } catch (error) {
     return res.status(500).json({ 
       error: 'Internal Server Error', 
-      message: error.message 
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }

@@ -48,8 +48,8 @@ router.get('/', async (_req: Request, res: Response) => {
         pendingPayments: pendingPaymentsList,
       },
     });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message });
+  } catch (error) {
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 
