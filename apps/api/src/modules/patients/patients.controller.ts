@@ -7,7 +7,8 @@ import { paginate, parsePagination } from '../../utils/paginate';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { toPaymentResponse } from '../payments/payments.transformer';
-import { auditLog } from '@api/middlewares/audit.middleware';
+import { EncounterModel } from '../encounters/encounter.model';
+import { toEncounterResponse } from '../encounters/encounters.transformer';
 
 const router = Router();
 router.use(authenticate);
@@ -182,7 +183,7 @@ router.delete('/:id', WRITE_ROLES, async (req: Request, res: Response) => {
 
 // GET /patients/:id/payments
 router.get('/:id/payments', asyncHandler(async (req: Request, res: Response) => {
-  const pagination = parsePagination(req.query as Record<string, any>);
+  const pagination = parsePagination(req.query as Record<string, unknown>);
   if (!pagination) {
     return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
   }
@@ -210,6 +211,40 @@ router.get('/:id/payments', asyncHandler(async (req: Request, res: Response) => 
   return res.json({ 
     status: 'success', 
     data: result.data.map(toPaymentResponse), 
+    meta: result.meta 
+  });
+}));
+
+// GET /patients/:id/encounters — RESTful nested resource route
+router.get('/:id/encounters', asyncHandler(async (req: Request, res: Response) => {
+  const pagination = parsePagination(req.query as Record<string, unknown>);
+  if (!pagination) {
+    return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+  }
+  const { page, limit } = pagination;
+
+  // First verify patient belongs to the caller's clinic
+  const patient = await PatientModel.findOne({ 
+    _id: req.params.id, 
+    clinicId: req.user!.clinicId,
+    isActive: true 
+  });
+  
+  if (!patient) {
+    return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+  }
+
+  // Query encounters by patientId and clinicId, sorted by createdAt descending
+  const filter = { 
+    patientId: req.params.id,
+    clinicId: req.user!.clinicId 
+  };
+
+  const result = await paginate(EncounterModel, filter, page, limit, { createdAt: -1 });
+  
+  return res.json({ 
+    status: 'success', 
+    data: result.data.map(toEncounterResponse), 
     meta: result.meta 
   });
 }));
