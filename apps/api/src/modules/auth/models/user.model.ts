@@ -1,12 +1,12 @@
 import bcrypt from 'bcryptjs';
-import { Schema, Types, model, models } from 'mongoose';
+import { Schema, model, models } from 'mongoose';
 import { AppRole } from '@api/types/express';
 
 const ROLES: AppRole[] = ['SUPER_ADMIN','CLINIC_ADMIN','DOCTOR','NURSE','ASSISTANT','READ_ONLY'];
 
 export interface User {
   fullName: string; email: string; password: string;
-  role: AppRole; clinicId: Types.ObjectId; isActive: boolean;
+  role: AppRole; clinicId: string; isActive: boolean;
   mfaEnabled: boolean; mfaSecret?: string;
   resetPasswordTokenHash?: string; resetPasswordExpiresAt?: Date;
 }
@@ -16,7 +16,7 @@ const userSchema = new Schema({
   email:     { type: String, required: true, unique: true, lowercase: true, trim: true },
   password:  { type: String, required: true },
   role:      { type: String, enum: ROLES, required: true },
-  clinicId:  { type: Schema.Types.ObjectId, ref: 'Clinic', required: true },
+  clinicId:  { type: String, required: true, index: true },
   isActive:  { type: Boolean, default: true, index: true },
   mfaEnabled: { type: Boolean, default: false },
   mfaSecret:  { type: String, required: false, select: false, default: undefined },
