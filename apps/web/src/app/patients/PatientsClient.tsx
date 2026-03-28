@@ -2,10 +2,9 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
 import { type Patient, formatDate } from "@health-watchers/types";
 import { ErrorMessage, TableSkeleton, ModuleEmptyState, Button } from "@/components/ui";
-import { queryKeys } from "@/lib/queryKeys";
+import { usePatients } from "@/lib/queries";
 
 interface Labels {
   title: string;
@@ -20,24 +19,11 @@ interface Labels {
   view: string;
 }
 
-const API_BASE_URL = 'http://localhost:3001/api/v1'
-
 export default function PatientsClient({ labels }: { labels: Labels }) {
   const [searchQuery, setSearchQuery] = useState("");
   const debounceTimer = useRef<NodeJS.Timeout>();
 
-  const { data: patients = [], isLoading, error } = useQuery({
-    queryKey: queryKeys.patients.list(searchQuery || undefined),
-    queryFn: async () => {
-      const url = searchQuery
-        ? `http://localhost:3001/api/v1/patients/search?q=${encodeURIComponent(searchQuery)}`
-        : "http://localhost:3001/api/v1/patients";
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Request failed (${res.status})`);
-      const data = await res.json();
-      return data.data || [];
-    },
-  });
+  const { data: patients = [], isLoading, error } = usePatients(searchQuery);
 
   const handleSearch = (value: string) => {
     setSearchQuery(value);
@@ -140,6 +126,10 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           } : undefined}
           isLoading={submitting}
           onSubmit={handleFormSubmit}
+          onSuccess={() => {
+            setToast({ message: 'Patient saved successfully.', type: 'success' })
+            handleFormCancel()
+          }}
           onCancel={handleFormCancel}
         />
       </SlideOver>
