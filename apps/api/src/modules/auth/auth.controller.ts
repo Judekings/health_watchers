@@ -9,6 +9,7 @@ import {
   MfaVerifyDto, MfaChallengeDto,
   changePasswordSchema, ChangePasswordDto,
 } from './auth.validation';
+import { sendPasswordResetEmail } from '@api/lib/email.service';
 import { UserModel } from './models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import {
@@ -368,30 +369,27 @@ router.post('/register', validateRequest({ body: registerSchema }), async (req: 
  *       200:
  *         description: Password updated successfully
  *       400:
- *         description: Validation error or passwords do not match
- *       401:
- *         description: Unauthorized or current password incorrect
+ *         description: Token invalid, expired, or already used
  */
-router.patch('/me/password', authenticate, validateRequest({ body: changePasswordSchema }), async (req: ChangePasswordReq, res: Response) => {
-  const { currentPassword, newPassword, confirmPassword } = req.body;
+router.post('/reset-password', validateRequest({ body: resetPasswordSchema }), async (req: Request<Record<string, never>, unknown, ResetPasswordDto>, res: Response) => {
+  const tokenHash = hashToken(req.body.token);
 
-  const user = await UserModel.findById(req.user!.userId).select('+password +refreshTokenHash');
-  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const user = await UserModel.findOne({ resetPasswordTokenHash: tokenHash })
+    .select('+resetPasswordTokenHash +resetPasswordExpiresAt');
 
-  const passwordMatch = await bcrypt.compare(currentPassword, user.password);
-  if (!passwordMatch) {
-    return res.status(401).json({ error: 'Unauthorized', message: 'Current password is incorrect' });
+  if (!user || !user.resetPasswordExpiresAt || user.resetPasswordExpiresAt < new Date()) {
+    return res.status(400).json({ error: 'InvalidToken', message: 'Reset token is invalid or has expired' });
   }
 
-  if (newPassword !== confirmPassword) {
-    return res.status(400).json({ error: 'BadRequest', message: 'Passwords do not match' });
-  }
-
-  user.password = newPassword; // pre-save hook will bcrypt-hash this
+  // Update password — pre-save hook will hash it
+  user.password = req.body.newPassword;
+  // Single-use: clear reset fields and invalidate any active sessions
+  user.resetPasswordTokenHash = undefined;
+  user.resetPasswordExpiresAt = undefined;
   user.refreshTokenHash = undefined;
   await user.save();
 
-  return res.status(200).json({ status: 'success', data: { message: 'Password updated successfully' } });
+  return res.json({ status: 'success', message: 'Password has been reset successfully' });
 });
 
 export const authRoutes = router;
