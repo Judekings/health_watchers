@@ -13,9 +13,11 @@ import {
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { toEncounterResponse } from './encounters.transformer';
 import { paginate, parsePagination } from '@api/utils/paginate';
+import { auditLog } from '@api/middlewares/audit.middleware';
 
 const router = Router();
 router.use(authenticate);
+router.use(auditLog('Encounter'));
 
 // GET /encounters — paginated list scoped to the authenticated clinic
 router.get(

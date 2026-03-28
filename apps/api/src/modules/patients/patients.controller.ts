@@ -7,9 +7,11 @@ import { paginate, parsePagination } from '../../utils/paginate';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { toPaymentResponse } from '../payments/payments.transformer';
+import { auditLog } from '@api/middlewares/audit.middleware';
 
 const router = Router();
 router.use(authenticate);
+router.use(auditLog('Patient'));
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
 

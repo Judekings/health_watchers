@@ -11,6 +11,7 @@ import { patientRoutes } from './modules/patients/patients.controller';
 import { encounterRoutes } from './modules/encounters/encounters.controller';
 import { paymentRoutes } from './modules/payments/payments.controller';
 import { webhookRoutes } from './modules/webhooks/webhooks.controller';
+import { auditLogRoutes } from './modules/audit/audit-logs.controller';
 import aiRoutes from './modules/ai/ai.routes';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
@@ -59,6 +60,7 @@ app.use('/api/v1/patients', patientRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
+app.use('/api/v1/audit-logs', auditLogRoutes);
 // Override limit for AI routes
 app.use('/api/v1/ai', express.json({ limit: aiLimit }), aiRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
