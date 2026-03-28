@@ -4,7 +4,7 @@ import { PaymentRecordModel } from './models/payment-record.model';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { objectIdSchema } from '@api/middlewares/objectid.schema';
-import { createPaymentIntentSchema, confirmPaymentSchema } from './payments.validation';
+import { createPaymentIntentSchema, confirmPaymentSchema, confirmPaymentParamsSchema } from './payments.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { createPaymentIntentSchema, listPaymentsQuerySchema, ListPaymentsQuery } from './payments.validation';
 import { toPaymentResponse } from './payments.transformer';
@@ -109,10 +109,10 @@ router.post(
 );
 
 /**
- * POST /payments/confirm
+ * PATCH /payments/:intentId/confirm
  * Confirm a payment by verifying the on-chain transaction.
  *
- * Accepts: { intentId: string, txHash: string }
+ * Accepts: { txHash: string }
  *
  * Verifies:
  * - Transaction exists on Stellar blockchain
@@ -121,12 +121,14 @@ router.post(
  * - Asset code matches
  *
  * Updates payment status to 'confirmed' or 'failed'
+ * Returns 409 if payment is already confirmed
  */
-router.post(
-  '/confirm',
-  validateRequest({ body: confirmPaymentSchema }),
+router.patch(
+  '/:intentId/confirm',
+  validateRequest({ params: confirmPaymentParamsSchema, body: confirmPaymentSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { intentId, txHash } = req.body;
+    const { intentId } = req.params;
+    const { txHash } = req.body;
 
     // Find the payment intent
     const payment = await PaymentRecordModel.findOne({ intentId });
@@ -139,7 +141,7 @@ router.post(
 
     // Check if already confirmed
     if (payment.status === 'confirmed') {
-      return res.status(400).json({
+      return res.status(409).json({
         error: 'AlreadyConfirmed',
         message: 'This payment has already been confirmed',
       });
