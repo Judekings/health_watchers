@@ -1,19 +1,35 @@
 import { Router, Request, Response } from 'express';
 import { EncounterModel } from './encounter.model';
-import { authenticate } from '@api/middlewares/auth.middleware';
+import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
+import { objectIdSchema } from '@api/middlewares/objectid.schema';
+import { asyncHandler } from '@api/middlewares/async.handler';
+import {
+  createEncounterSchema,
+  updateEncounterSchema,
+  listEncountersQuerySchema,
+  ListEncountersQuery,
+} from './encounter.validation';
+import { toEncounterResponse } from './encounters.transformer';
+import { asyncHandler } from '../../utils/asyncHandler';
+import { validateRequest } from '../../middlewares/validate.middleware';
+import { paginate, parsePagination } from '../../utils/paginate';
 import {
   createEncounterSchema,
   updateEncounterSchema,
   encounterIdParamSchema,
   patientIdParamSchema,
+  prescriptionSchema,
+  prescriptionIdParamSchema,
 } from './encounter.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { toEncounterResponse } from './encounters.transformer';
 import { paginate, parsePagination } from '@api/utils/paginate';
+import { auditLog } from '@api/middlewares/audit.middleware';
 
 const router = Router();
 router.use(authenticate);
+router.use(auditLog('Encounter'));
 
 // GET /encounters — paginated list scoped to the authenticated clinic
 router.get(
@@ -98,6 +114,34 @@ router.post(
     const { patientId, clinicId, chiefComplaint, notes } = req.body;
     const doc = await EncounterModel.create({ patientId, clinicId, chiefComplaint, notes });
     return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
+  })
+router.post(
+  '/',
+  validateRequest({ body: createEncounterSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const encounter = await EncounterModel.create(req.body);
+    res.status(201).json({ status: 'success', data: toEncounterResponse(encounter) });
+  }),
+);
+
+router.get(
+  '/patient/:patientId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const encounters = await EncounterModel
+      .find({ patientId: req.params.patientId, clinicId: req.user!.clinicId })
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ status: 'success', data: encounters.map(toEncounterResponse) });
+  }),
+);
+
+router.get(
+  '/:id',
+  validateRequest({ params: objectIdSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const encounter = await EncounterModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId }).lean();
+    if (!encounter) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    res.json({ status: 'success', data: toEncounterResponse(encounter) });
   }),
 );
 
@@ -106,6 +150,19 @@ router.patch(
   '/:id',
   validateRequest({ params: encounterIdParamSchema, body: updateEncounterSchema }),
   asyncHandler(async (req: Request, res: Response) => {
+    const encounter = await EncounterModel.findOneAndUpdate(
+      { _id: req.params.id, clinicId: req.user!.clinicId },
+      req.body,
+      { new: true, runValidators: true },
+    ).lean();
+    if (!encounter) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    res.json({ status: 'success', data: toEncounterResponse(encounter) });
+  }),
+);
+
+// PATCH /encounters/:id — update notes, diagnosis, treatmentPlan, aiSummary
+router.patch('/:id', authenticate, WRITE_ROLES, async (req: Request, res: Response) => {
+  try {
     const { notes, diagnosis, treatmentPlan, aiSummary } = req.body;
     const update: Record<string, any> = {};
     if (notes !== undefined) update.notes = notes;
@@ -117,6 +174,40 @@ router.patch(
       new: true,
       runValidators: true,
     });
+    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    return res.json({ status: 'success', data: toEncounterResponse(doc) });
+  }),
+);
+
+const PRESCRIPTION_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN');
+
+// POST /encounters/:id/prescriptions
+router.post(
+  '/:id/prescriptions',
+  PRESCRIPTION_ROLES,
+  validateRequest({ params: encounterIdParamSchema, body: prescriptionSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const doc = await EncounterModel.findByIdAndUpdate(
+      req.params.id,
+      { $push: { prescriptions: req.body } },
+      { new: true, runValidators: true },
+    );
+    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
+  }),
+);
+
+// DELETE /encounters/:id/prescriptions/:prescriptionId
+router.delete(
+  '/:id/prescriptions/:prescriptionId',
+  PRESCRIPTION_ROLES,
+  validateRequest({ params: prescriptionIdParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const doc = await EncounterModel.findByIdAndUpdate(
+      req.params.id,
+      { $pull: { prescriptions: { _id: req.params.prescriptionId } } },
+      { new: true },
+    );
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     return res.json({ status: 'success', data: toEncounterResponse(doc) });
   }),
