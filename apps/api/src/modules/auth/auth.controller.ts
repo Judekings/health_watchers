@@ -122,11 +122,32 @@ router.post('/register', authenticate, validateRequest({ body: registerSchema })
  */
 router.post('/login', validateRequest({ body: loginSchema }), async (req: LoginReq, res: Response) => {
   const user = await UserModel.findOne({ email: req.body.email.toLowerCase().trim() });
-  if (!user || !user.isActive) return res.status(401).json({ error: 'Unauthorized', message: INVALID });
+  if (!user || !user.isActive) {
+    // Log failed login attempt
+    await auditLog(
+      {
+        action: 'LOGIN_FAILURE',
+        outcome: 'FAILURE',
+        metadata: { email: req.body.email, reason: 'Invalid credentials' },
+      },
+      req
+    );
+    return res.status(401).json({ error: 'Unauthorized', message: INVALID });
+  }
 
   if (user.lockedUntil && user.lockedUntil > new Date()) {
     const retryAfterSecs = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 1000);
     res.set('Retry-After', String(retryAfterSecs));
+    await auditLog(
+      {
+        action: 'LOGIN_FAILURE',
+        userId: user.id,
+        clinicId: user.clinicId,
+        outcome: 'FAILURE',
+        metadata: { email: user.email, reason: 'Account locked' },
+      },
+      req
+    );
     return res.status(423).json({
       error: 'AccountLocked',
       message: 'Account is temporarily locked due to too many failed login attempts. Please try again later.',
@@ -141,6 +162,18 @@ router.post('/login', validateRequest({ body: loginSchema }), async (req: LoginR
       user.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
     }
     await user.save();
+    
+    // Log failed login attempt
+    await auditLog(
+      {
+        action: 'LOGIN_FAILURE',
+        userId: user.id,
+        clinicId: user.clinicId,
+        outcome: 'FAILURE',
+        metadata: { email: user.email, reason: 'Invalid password' },
+      },
+      req
+    );
     return res.status(401).json({ error: 'Unauthorized', message: INVALID });
   }
 
@@ -153,6 +186,18 @@ router.post('/login', validateRequest({ body: loginSchema }), async (req: LoginR
   if (user.mfaEnabled) {
     return res.json({ status: 'mfa_required', data: { mfaRequired: true, tempToken: signTempToken(user.id) } });
   }
+
+  // Log successful login
+  await auditLog(
+    {
+      action: 'LOGIN_SUCCESS',
+      userId: user.id,
+      clinicId: user.clinicId,
+      outcome: 'SUCCESS',
+      metadata: { email: user.email },
+    },
+    req
+  );
 
   const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
   const accessToken  = signAccessToken(p);
@@ -294,6 +339,18 @@ router.post('/mfa/challenge', validateRequest({ body: mfaChallengeSchema }), asy
   const { totp } = await import('@otplib/preset-default');
   const valid = totp.verify({ token: req.body.totp, secret: user.mfaSecret });
   if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
+
+  // Log successful MFA login
+  await auditLog(
+    {
+      action: 'LOGIN_SUCCESS',
+      userId: user.id,
+      clinicId: user.clinicId,
+      outcome: 'SUCCESS',
+      metadata: { email: user.email, mfa: true },
+    },
+    req
+  );
 
   const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
   const accessToken  = signAccessToken(p);
