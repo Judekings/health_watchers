@@ -20,9 +20,11 @@ export const paymentIdParamSchema = z.object({
 });
 
 export const createPaymentIntentSchema = z.object({
-  patientId: z.string().regex(/^[a-f\d]{24}$/i, 'Invalid patientId'),
-  // eslint-disable-next-line security/detect-unsafe-regex -- anchored regex with limited input is safe
+  intentId: z.string().min(1, 'intentId is required'),
   amount: z.string().regex(/^\d+(\.\d{1,7})?$/, 'amount must be a positive numeric string'),
+  destination: z.string().min(1, 'destination is required'),
+  memo: z.string().optional(),
+  patientId: z.string().regex(/^[a-f\d]{24}$/i, 'Invalid patientId').optional(),
   assetCode: z.string().optional().default('XLM'),
   issuer: z.string().optional(),
 });

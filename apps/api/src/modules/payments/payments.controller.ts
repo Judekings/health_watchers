@@ -20,11 +20,12 @@ router.post(
       amount,
       destination,
       memo,
-      clinicId,
       patientId,
       assetCode = 'XLM',
       issuer,
     } = req.body;
+
+    const clinicId = req.user!.clinicId;
 
     const normalizedAsset = String(assetCode).toUpperCase().trim();
 
@@ -49,7 +50,7 @@ router.post(
       amount,
       destination,
       memo,
-      clinicId: clinicId || 'default',
+      clinicId: clinicId,
       patientId,
       status: 'pending',
       assetCode: normalizedAsset,
@@ -200,8 +201,10 @@ router.post(
 
 router.get(
   '/',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const payments = await PaymentRecordModel.find().sort({ createdAt: -1 });
+  asyncHandler(async (req: Request, res: Response) => {
+    const filter: Record<string, any> = { clinicId: req.user!.clinicId };
+    if (req.query.patientId) filter.patientId = req.query.patientId;
+    const payments = await PaymentRecordModel.find(filter).sort({ createdAt: -1 });
     res.json({ status: 'success', data: payments.map(toPaymentResponse) });
   }),
 );
