@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { EncounterModel } from './encounter.model';
-import { authenticate } from '@api/middlewares/auth.middleware';
+import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import { objectIdSchema } from '@api/middlewares/objectid.schema';
 import { asyncHandler } from '@api/middlewares/async.handler';
@@ -19,13 +19,17 @@ import {
   updateEncounterSchema,
   encounterIdParamSchema,
   patientIdParamSchema,
+  prescriptionSchema,
+  prescriptionIdParamSchema,
 } from './encounter.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { toEncounterResponse } from './encounters.transformer';
 import { paginate, parsePagination } from '@api/utils/paginate';
+import { auditLog } from '@api/middlewares/audit.middleware';
 
 const router = Router();
 router.use(authenticate);
+router.use(auditLog('Encounter'));
 
 // GET /encounters — paginated list scoped to the authenticated clinic
 router.get(
@@ -170,6 +174,40 @@ router.patch('/:id', authenticate, WRITE_ROLES, async (req: Request, res: Respon
       new: true,
       runValidators: true,
     });
+    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    return res.json({ status: 'success', data: toEncounterResponse(doc) });
+  }),
+);
+
+const PRESCRIPTION_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN');
+
+// POST /encounters/:id/prescriptions
+router.post(
+  '/:id/prescriptions',
+  PRESCRIPTION_ROLES,
+  validateRequest({ params: encounterIdParamSchema, body: prescriptionSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const doc = await EncounterModel.findByIdAndUpdate(
+      req.params.id,
+      { $push: { prescriptions: req.body } },
+      { new: true, runValidators: true },
+    );
+    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
+  }),
+);
+
+// DELETE /encounters/:id/prescriptions/:prescriptionId
+router.delete(
+  '/:id/prescriptions/:prescriptionId',
+  PRESCRIPTION_ROLES,
+  validateRequest({ params: prescriptionIdParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const doc = await EncounterModel.findByIdAndUpdate(
+      req.params.id,
+      { $pull: { prescriptions: { _id: req.params.prescriptionId } } },
+      { new: true },
+    );
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     return res.json({ status: 'success', data: toEncounterResponse(doc) });
   }),
