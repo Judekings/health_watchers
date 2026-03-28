@@ -132,7 +132,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 // PATCH /patients/:id — partial update of allowed fields only
-router.patch('/:id', authenticate, WRITE_ROLES, async (req: Request, res: Response) => {
+router.patch('/:id', WRITE_ROLES, async (req: Request, res: Response) => {
   try {
     const disallowed = Object.keys(req.body).filter((k) => !ALLOWED_PATCH_FIELDS.has(k));
     if (disallowed.length > 0) {
@@ -166,7 +166,7 @@ router.patch('/:id', authenticate, WRITE_ROLES, async (req: Request, res: Respon
 });
 
 // DELETE /patients/:id — soft delete
-router.delete('/:id', authenticate, WRITE_ROLES, async (req: Request, res: Response) => {
+router.delete('/:id', WRITE_ROLES, async (req: Request, res: Response) => {
   try {
     const doc = await PatientModel.findByIdAndUpdate(
       req.params.id,

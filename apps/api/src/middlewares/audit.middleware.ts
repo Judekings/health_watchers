@@ -1,38 +1,39 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuditLogModel, AuditAction, AuditResourceType } from '../modules/audit/audit-log.model';
-import logger from '../utils/logger';
-
-const METHOD_ACTION: Record<string, AuditAction> = {
-  GET:    'READ',
-  POST:   'CREATE',
-  PUT:    'UPDATE',
-  PATCH:  'UPDATE',
-  DELETE: 'DELETE',
-};
+import { auditLog } from '../modules/audit/audit.service';
+import { AuditAction } from '../modules/audit/audit.model';
 
 /**
- * Returns an Express middleware that logs PHI access after a successful response.
- * @param resourceType - The type of resource being accessed (Patient | Encounter | Payment)
+ * Middleware to automatically log audit events for specific routes
  */
-export function auditLog(resourceType: AuditResourceType) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    res.on('finish', () => {
-      // Only log successful responses (2xx) for authenticated users
-      if (res.statusCode < 200 || res.statusCode >= 300 || !req.user) return;
+export function auditMiddleware(action: AuditAction, resourceType?: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    // Store original send function
+    const originalSend = res.send;
 
-      const action = METHOD_ACTION[req.method] ?? 'READ';
-      const resourceId = req.params.id || req.params.patientId || 'collection';
+    // Override send to capture response
+    res.send = function (data: any): Response {
+      // Only log if response is successful (2xx status code)
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        const resourceId = req.params.id || req.params.patientId || req.params.encounterId;
+        
+        auditLog(
+          {
+            action,
+            resourceType,
+            resourceId,
+            userId: req.user?.userId,
+            clinicId: req.user?.clinicId,
+            outcome: 'SUCCESS',
+          },
+          req
+        ).catch((error) => {
+          console.error('Audit logging failed:', error);
+        });
+      }
 
-      AuditLogModel.create({
-        userId:       req.user.userId,
-        clinicId:     req.user.clinicId,
-        action,
-        resourceType,
-        resourceId,
-        ipAddress:    (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown',
-        userAgent:    req.headers['user-agent'] || 'unknown',
-      }).catch((err) => logger.error({ err }, 'Failed to write audit log'));
-    });
+      // Call original send
+      return originalSend.call(this, data);
+    };
 
     next();
   };
