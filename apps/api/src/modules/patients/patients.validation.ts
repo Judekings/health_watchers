@@ -1,13 +1,15 @@
 import { z } from 'zod';
-import { PatientSchema } from '@health-watchers/types';
 
-export const createPatientSchema = PatientSchema.pick({
-  firstName: true, lastName: true, dateOfBirth: true,
-  sex: true, contactNumber: true, address: true,
+export const createPatientSchema = z.object({
+  firstName:     z.string().min(1),
+  lastName:      z.string().min(1),
+  dateOfBirth:   z.string().min(1),
+  sex:           z.enum(['M', 'F', 'O']),
+  contactNumber: z.string().optional(),
+  address:       z.string().optional(),
 });
-export const patientIdParamsSchema    = z.object({ id: z.string().trim().min(1) });
-export const patientSearchQuerySchema = z.object({ q: z.string().trim().min(1) });
 
-export type CreatePatientDto      = z.infer<typeof createPatientSchema>;
-export type PatientIdParamsDto    = z.infer<typeof patientIdParamsSchema>;
-export type PatientSearchQueryDto = z.infer<typeof patientSearchQuerySchema>;
+export const updatePatientSchema = createPatientSchema.partial();
+
+export type CreatePatientDto = z.infer<typeof createPatientSchema>;
+export type UpdatePatientDto = z.infer<typeof updatePatientSchema>;

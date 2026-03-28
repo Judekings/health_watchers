@@ -3,7 +3,8 @@ import { NextIntlClientProvider } from "next-intl";
 import { getMessages, getLocale } from "next-intl/server";
 import Navbar from "../components/Navbar";
 import { ErrorBoundary } from "../components/ui/error-boundary";
-import { QueryClientProvider } from "../lib/QueryClientProvider";
+import { QueryProvider } from "@/lib/QueryProvider";
+import { RealtimeProvider } from "@/components/RealtimeProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,17 +24,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang={locale}>
-      <body className="min-h-screen bg-white text-gray-900 font-sans">
-        <QueryClientProvider>
-          <NextIntlClientProvider locale={locale} messages={messages}>
-            <Navbar />
-            <div id="main-content" tabIndex={-1}>
-              <ErrorBoundary>
-                {children}
-              </ErrorBoundary>
-            </div>
-          </NextIntlClientProvider>
-        </QueryClientProvider>
+      <body className="min-h-screen bg-neutral-50 font-sans antialiased">
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <QueryProvider>
+            <RealtimeProvider>
+              <Navbar />
+              <div id="main-content" tabIndex={-1}>
+                <ErrorBoundary>
+                  {children}
+                </ErrorBoundary>
+              </div>
+            </RealtimeProvider>
+          </QueryProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

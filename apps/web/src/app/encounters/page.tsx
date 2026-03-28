@@ -1,76 +1,104 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { PageWrapper, PageHeader, Card, CardContent } from '@/components/ui';
+import { useMemo, useState } from "react";
+import EncounterTable, {
+  type EncounterRecord,
+  type EncounterStatus,
+  MOCK_ENCOUNTERS,
+} from "../../components/encounters/EncounterTable";
+import EncounterDetail from "../../components/encounters/EncounterDetail";
+import EncounterForm, {
+  type EncounterFormValues,
+} from "../../components/forms/EncounterForm";
 
-interface Encounter {
-  id: string;
-  patientId: string;
-  date: string;
-  notes: string;
+function nextStatus(): EncounterStatus {
+  return "active";
+}
+
+function mapFormToEncounter(
+  values: EncounterFormValues,
+  existingLength: number,
+): EncounterRecord {
+  const encounterNumber = String(existingLength + 1).padStart(5, "0");
+
+  return {
+    id: `EN-2026-${encounterNumber}`,
+    patientName: values.patientName,
+    patientMrn: values.patientMrn,
+    doctor: values.doctor,
+    status: nextStatus(),
+    encounterAt: new Date().toISOString(),
+    chiefComplaint: values.chiefComplaint,
+    diagnosis: values.diagnosis
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean),
+    treatmentPlan: values.treatmentPlan,
+    prescriptions: values.prescriptions
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => ({
+        name: item,
+        dose: "As documented",
+        frequency: "As directed",
+      })),
+    vitals: {
+      bloodPressure: values.bloodPressure,
+      heartRate: values.heartRate,
+      temperature: values.temperature,
+      spo2: values.spo2,
+    },
+    followUpDate: values.followUpDate,
+  };
 }
 
 export default function EncountersPage() {
-  const [encounters, setEncounters] = useState<Encounter[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [encounters, setEncounters] =
+    useState<EncounterRecord[]>(MOCK_ENCOUNTERS);
+  const [selectedEncounterId, setSelectedEncounterId] = useState<string | null>(
+    null,
+  );
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
-  useEffect(() => {
-    fetch('http://localhost:3001/api/v1/encounters')
-      .then(res => res.json())
-      .then(data => {
-        setEncounters(data || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
-  }, []);
+  const selectedEncounter = useMemo(
+    () => encounters.find((item) => item.id === selectedEncounterId) ?? null,
+    [encounters, selectedEncounterId],
+  );
 
-  if (loading) {
-    return (
-      <PageWrapper className="py-8">
-        <div className="flex items-center justify-center">
-          <p className="text-secondary-600">Loading encounters...</p>
-        </div>
-      </PageWrapper>
-    );
-  }
+  const doctors = useMemo(() => {
+    const list = Array.from(new Set(encounters.map((item) => item.doctor)));
+    return list.length > 0 ? list : ["Dr. Julian Smith"];
+  }, [encounters]);
+
+  const handleCreateEncounter = (values: EncounterFormValues) => {
+    const next = mapFormToEncounter(values, encounters.length);
+    setEncounters((prev) => [next, ...prev]);
+    setSelectedEncounterId(next.id);
+  };
 
   return (
-    <PageWrapper className="py-8">
-      <PageHeader title="Encounters" />
-      <div className="space-y-4">
-        {encounters.map(encounter => (
-          <Card key={encounter.id}>
-            <CardContent className="space-y-2">
-              <div className="flex flex-wrap gap-4 text-sm">
-                <div>
-                  <span className="font-medium text-secondary-900">ID:</span>{' '}
-                  <span className="font-mono text-secondary-700">{encounter.id}</span>
-                </div>
-                <div>
-                  <span className="font-medium text-secondary-900">Patient:</span>{' '}
-                  <span className="text-secondary-700">{encounter.patientId}</span>
-                </div>
-                <div>
-                  <span className="font-medium text-secondary-900">Date:</span>{' '}
-                  <span className="text-secondary-700">{encounter.date}</span>
-                </div>
-              </div>
-              <div>
-                <span className="font-medium text-secondary-900">Notes:</span>{' '}
-                <span className="text-secondary-700">{encounter.notes}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        {encounters.length === 0 && (
-          <div className="text-center py-8">
-            <p className="text-secondary-600">No encounters found.</p>
-          </div>
-        )}
-      </div>
-    </PageWrapper>
+    <main className="mx-auto max-w-6xl px-4 py-6 md:px-6">
+      {!selectedEncounter ? (
+        <EncounterTable
+          encounters={encounters}
+          onViewDetail={setSelectedEncounterId}
+          onNewEncounter={() => setIsFormOpen(true)}
+        />
+      ) : (
+        <EncounterDetail
+          encounter={selectedEncounter}
+          onBack={() => setSelectedEncounterId(null)}
+          onEdit={() => setIsFormOpen(true)}
+        />
+      )}
+
+      <EncounterForm
+        open={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        onSubmit={handleCreateEncounter}
+        doctors={doctors}
+      />
+    </main>
   );
 }

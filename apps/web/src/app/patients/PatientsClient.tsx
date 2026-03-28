@@ -1,10 +1,10 @@
-"use client";
+'use client'
 
 import { useState, useRef } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { type Patient, formatDate } from "@health-watchers/types";
-import { ErrorMessage } from "@/components/ui";
+import { ErrorMessage, TableSkeleton, ModuleEmptyState, Button } from "@/components/ui";
 import { queryKeys } from "@/lib/queryKeys";
 
 interface Labels {
@@ -19,6 +19,8 @@ interface Labels {
   search: string;
   view: string;
 }
+
+const API_BASE_URL = 'http://localhost:3001/api/v1'
 
 export default function PatientsClient({ labels }: { labels: Labels }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -57,11 +59,14 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
         />
       </div>
       {isLoading ? (
-        <p role="status" aria-live="polite" className="text-gray-500">{labels.loading}</p>
+        <TableSkeleton columns={6} rows={5} />
       ) : error ? (
         <ErrorMessage message={error instanceof Error ? error.message : "Failed to load patients."} onRetry={() => window.location.reload()} />
       ) : patients.length === 0 ? (
-        <p role="status" className="text-gray-500">{labels.empty}</p>
+        <ModuleEmptyState 
+          module="patients"
+          action={<Button variant="primary" size="md" className="mt-2">Add New Patient</Button>}
+        />
       ) : (
         <>
           <div className="md:hidden flex flex-col gap-4">
@@ -116,6 +121,28 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           </div>
         </>
       )}
-    </main>
-  );
+
+      <SlideOver
+        isOpen={showForm}
+        onClose={handleFormCancel}
+        title={formMode === 'create' ? 'New Patient' : 'Edit Patient'}
+        subtitle={formMode === 'create' ? 'Add a new patient to the system' : 'Update patient information'}
+        width="w-full sm:w-[400px]"
+      >
+        <PatientForm
+          initialData={formMode === 'edit' && selectedPatient ? {
+            firstName: selectedPatient.firstName,
+            lastName: selectedPatient.lastName,
+            dateOfBirth: selectedPatient.dateOfBirth?.split('T')[0] || '',
+            sex: (selectedPatient.gender === 'male' ? 'M' : selectedPatient.gender === 'female' ? 'F' : 'O') as 'M' | 'F' | 'O',
+            contactNumber: selectedPatient.phone || '',
+            address: selectedPatient.address || '',
+          } : undefined}
+          isLoading={submitting}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormCancel}
+        />
+      </SlideOver>
+    </PageWrapper>
+  )
 }
