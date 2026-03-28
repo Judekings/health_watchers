@@ -7,9 +7,12 @@ import { paginate, parsePagination } from '../../utils/paginate';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { PaymentRecordModel } from '../payments/models/payment-record.model';
 import { toPaymentResponse } from '../payments/payments.transformer';
+import { EncounterModel } from '../encounters/encounter.model';
+import { toEncounterResponse } from '../encounters/encounters.transformer';
 
 const router = Router();
 router.use(authenticate);
+router.use(auditLog('Patient'));
 
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
 
@@ -155,13 +158,14 @@ router.patch('/:id', WRITE_ROLES, async (req: Request, res: Response) => {
         .trim();
     }
 
-    const updated = await PatientModel.findByIdAndUpdate(req.params.id, update, { new: true });
+    const updated = await PatientModel.findOneAndUpdate({ _id: req.params.id, clinicId }, update, {
+      new: true,
+      runValidators: true,
+    });
     if (!updated) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: toPatientResponse(updated) });
-  } catch (err: any) {
-    return res.status(400).json({ error: 'BadRequest', message: err.message });
-  }
-});
+  }),
+);
 
 // DELETE /patients/:id — soft delete
 router.delete('/:id', WRITE_ROLES, async (req: Request, res: Response) => {
@@ -173,14 +177,12 @@ router.delete('/:id', WRITE_ROLES, async (req: Request, res: Response) => {
     );
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
     return res.json({ status: 'success', data: { id: String(doc._id), isActive: false } });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
-  }
-});
+  }),
+);
 
 // GET /patients/:id/payments
 router.get('/:id/payments', asyncHandler(async (req: Request, res: Response) => {
-  const pagination = parsePagination(req.query as Record<string, any>);
+  const pagination = parsePagination(req.query as Record<string, unknown>);
   if (!pagination) {
     return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
   }
@@ -208,6 +210,40 @@ router.get('/:id/payments', asyncHandler(async (req: Request, res: Response) => 
   return res.json({ 
     status: 'success', 
     data: result.data.map(toPaymentResponse), 
+    meta: result.meta 
+  });
+}));
+
+// GET /patients/:id/encounters — RESTful nested resource route
+router.get('/:id/encounters', asyncHandler(async (req: Request, res: Response) => {
+  const pagination = parsePagination(req.query as Record<string, unknown>);
+  if (!pagination) {
+    return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+  }
+  const { page, limit } = pagination;
+
+  // First verify patient belongs to the caller's clinic
+  const patient = await PatientModel.findOne({ 
+    _id: req.params.id, 
+    clinicId: req.user!.clinicId,
+    isActive: true 
+  });
+  
+  if (!patient) {
+    return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+  }
+
+  // Query encounters by patientId and clinicId, sorted by createdAt descending
+  const filter = { 
+    patientId: req.params.id,
+    clinicId: req.user!.clinicId 
+  };
+
+  const result = await paginate(EncounterModel, filter, page, limit, { createdAt: -1 });
+  
+  return res.json({ 
+    status: 'success', 
+    data: result.data.map(toEncounterResponse), 
     meta: result.meta 
   });
 }));
