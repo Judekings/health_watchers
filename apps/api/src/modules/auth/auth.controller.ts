@@ -7,8 +7,7 @@ import {
   LoginDto, RefreshDto, RegisterDto,
   loginSchema, refreshSchema, registerSchema, mfaVerifySchema, mfaChallengeSchema,
   MfaVerifyDto, MfaChallengeDto,
-  forgotPasswordSchema, resetPasswordSchema,
-  ForgotPasswordDto, ResetPasswordDto,
+  changePasswordSchema, ChangePasswordDto,
 } from './auth.validation';
 import { sendPasswordResetEmail } from '@api/lib/email.service';
 import { UserModel } from './models/user.model';
@@ -20,9 +19,10 @@ import {
 import { generateSecret, generateURI, totpVerify } from './totp.service';
 
 // ── local type helpers ────────────────────────────────────────────────────
-type LoginReq   = Request<Record<string, never>, unknown, LoginDto>;
-type RefreshReq = Request<Record<string, never>, unknown, RefreshDto>;
-type RegisterReq = Request<Record<string, never>, unknown, RegisterDto>;
+type LoginReq          = Request<Record<string, never>, unknown, LoginDto>;
+type RefreshReq        = Request<Record<string, never>, unknown, RefreshDto>;
+type RegisterReq       = Request<Record<string, never>, unknown, RegisterDto>;
+type ChangePasswordReq = Request<Record<string, never>, unknown, ChangePasswordDto>;
 
 const router = Router();
 const INVALID = 'Invalid email or password';
@@ -346,62 +346,25 @@ router.post('/register', validateRequest({ body: registerSchema }), async (req: 
   return res.status(201).json({ status: 'success', data: { id: user.id, email: user.email, role: user.role } });
 });
 
-const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
-const GENERIC_RESET_MSG = 'If that email is registered, a reset link has been sent.';
-
 /**
  * @swagger
- * /auth/forgot-password:
- *   post:
- *     summary: Request a password reset email
+ * /auth/me/password:
+ *   patch:
+ *     summary: Change the authenticated user's password
  *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [email]
+ *             required: [currentPassword, newPassword, confirmPassword]
  *             properties:
- *               email: { type: string, format: email }
- *     responses:
- *       200:
- *         description: Generic success (prevents user enumeration)
- */
-router.post('/forgot-password', validateRequest({ body: forgotPasswordSchema }), async (req: Request<Record<string, never>, unknown, ForgotPasswordDto>, res: Response) => {
-  const email = req.body.email.toLowerCase().trim();
-  const user = await UserModel.findOne({ email, isActive: true }).select('+resetPasswordTokenHash +resetPasswordExpiresAt');
-
-  // Always respond generically — do not reveal whether email exists
-  if (!user) return res.json({ status: 'success', message: GENERIC_RESET_MSG });
-
-  // Generate a cryptographically secure random token
-  const rawToken = crypto.randomBytes(32).toString('hex');
-  user.resetPasswordTokenHash = hashToken(rawToken);
-  user.resetPasswordExpiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
-  await user.save();
-
-  await sendPasswordResetEmail(email, rawToken);
-
-  return res.json({ status: 'success', message: GENERIC_RESET_MSG });
-});
-
-/**
- * @swagger
- * /auth/reset-password:
- *   post:
- *     summary: Reset password using a valid reset token
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [token, newPassword]
- *             properties:
- *               token:       { type: string }
- *               newPassword: { type: string, minLength: 8 }
+ *               currentPassword: { type: string }
+ *               newPassword:     { type: string, minLength: 8 }
+ *               confirmPassword: { type: string }
  *     responses:
  *       200:
  *         description: Password updated successfully
