@@ -1,133 +1,113 @@
-import express from "express";
-import { config } from "@health-watchers/config";
-import { authRoutes } from "./modules/auth/auth.controller";
-import { patientRoutes } from "./modules/patients/patients.controller";
-import { encounterRoutes } from "./modules/encounters/encounters.controller";
-import { paymentRoutes } from "./modules/payments/payments.controller";
-import aiRoutes from "./modules/ai/ai.routes";
-import { setupSwagger } from "./docs/swagger";
-import dashboardRoutes from "./modules/dashboard/dashboard.routes";
-import { usersRoutes } from "./modules/users/users.controller";
+import express from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import compression from 'compression';
+import mongoose from 'mongoose';
+import {config} from '@health-watchers/config';
 
 const app = express();
-app.disable('x-powered-by');
+const PORT = process.env.PORT || 4000;
 
-app.get("/health", (_req, res) =>
-  res.json({ status: "ok", service: "health-watchers-api" }),
-);
+// ========================
+// SECURITY & PERFORMANCE MIDDLEWARE
+// ========================
 
-app.options('*', cors());
-
-// Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 50kb)
-const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? '50kb';
-// AI routes allow larger payloads for summarization (default 500kb)
-const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '500kb';
-
-app.use(express.json({ limit: standardLimit }));
-
-// Sanitize req.body, req.query, req.params — replace $ and . to block NoSQL injection
-app.use(mongoSanitize({ replaceWith: '_' }));
-
-app.get('/health', async (_req, res) => {
-  const STELLAR_HEALTH_URL =
-    process.env.STELLAR_SERVICE_URL
-      ? `${process.env.STELLAR_SERVICE_URL}/health`
-      : 'http://stellar-service:3002/health';
-
-  const mongoOk = mongoose.connection.readyState === 1;
-
-  let stellarOk = false;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const resp = await fetch(STELLAR_HEALTH_URL, { signal: controller.signal });
-    clearTimeout(timeout);
-    stellarOk = resp.ok;
-  } catch {
-    stellarOk = false;
-  }
-
-  const healthy = mongoOk && stellarOk;
-  const status = healthy ? 'ok' : 'degraded';
-
-  res.status(healthy ? 200 : 503).json({
-    status,
-    checks: {
-      mongo: mongoOk ? 'ok' : 'error',
-      stellar: stellarOk ? 'ok' : 'error',
+// 1. Helmet (Security) - First
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
     },
+  },
+  hidePoweredBy: true,
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  noSniff: true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}));
+
+// 2. Compression (Performance) - Should come early, after helmet
+app.use(compression({
+  level: 6,                    // Balance between speed and compression ratio
+  threshold: 1024,             // Only compress responses larger than 1KB
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  }
+}));
+
+// 3. CORS
+app.use(cors({
+  origin: process.env.FRONTEND_URL || ['http://localhost:3000', 'http://localhost:3001'],
+  credentials: true,
+}));
+
+// Body parsers
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ========================
+// DATABASE CONNECTION
+// ========================
+const connectDB = async () => {
+  try {
+    const mongoUri = config.mongoUri;
+    if (!mongoUri) {
+      console.error('❌ MONGO_URI is not defined');
+      process.exit(1);
+    }
+
+    await mongoose.connect(mongoUri);
+    const host = new URL(mongoUri).hostname;
+    console.log(`✅ MongoDB connected to ${host}`);
+  } catch (error: any) {
+    console.error('❌ MongoDB connection failed:', error.message);
+    process.exit(1);
+  }
+};
+
+// ========================
+// BASIC HEALTH ROUTE
+// ========================
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    message: 'Health Watchers API is running',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    compression: 'enabled'
   });
 });
 
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/patients', patientRoutes);
-app.use('/api/v1/encounters', encounterRoutes);
-app.use('/api/v1/payments', paymentRoutes);
-app.use('/api/v1/webhooks', webhookRoutes);
-app.use('/api/v1/audit-logs', auditLogRoutes);
-// Override limit for AI routes
-app.use('/api/v1/ai', express.json({ limit: aiLimit }), aiRoutes);
-app.use('/api/v1/dashboard', dashboardRoutes);
-app.use('/api/v1/appointments', appointmentRoutes);
-app.use("/api/v1/auth", authRoutes);
-app.use("/api/v1/patients", patientRoutes);
-app.use("/api/v1/encounters", encounterRoutes);
-app.use("/api/v1/payments", paymentRoutes);
-app.use("/api/v1/ai", aiRoutes);
-app.use("/api/v1/dashboard", dashboardRoutes);
-app.use("/api/v1/users", usersRoutes);
+// 404 Handler
+app.use('*', (req, res) => {
+  res.status(404).json({ success: false, message: 'Route not found' });
+});
 
-setupSwagger(app);
+// ========================
+// START SERVER
+// ========================
+const startServer = async () => {
+  await connectDB();
 
-// Global error handler — must be last
-app.use(errorHandler);
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT} with gzip compression enabled`);
+  });
+};
 
-async function start() {
-  try {
-    await connectDB();
+process.on('unhandledRejection', (err: any) => {
+  console.error('Unhandled Rejection:', err.message);
+  process.exit(1);
+});
 
-    // Start background jobs
-    startPaymentExpirationJob();
-
-    const server = app.listen(config.apiPort, () => {
-      logger.info(`Health Watchers API running on port ${config.apiPort}`);
-    });
-
-    const SHUTDOWN_TIMEOUT_MS = Number(process.env.SHUTDOWN_TIMEOUT_MS ?? 10000);
-
-    async function shutdown(signal: string) {
-      logger.info({ signal }, 'Shutting down gracefully...');
-
-      // Stop background jobs
-      stopPaymentExpirationJob();
-
-      server.close(async () => {
-        logger.info('HTTP server closed');
-        try {
-          await mongoose.disconnect();
-          logger.info('MongoDB connection closed');
-          process.exit(0);
-        } catch (err) {
-          logger.error({ err }, 'Error closing MongoDB connection');
-          process.exit(1);
-        }
-      });
-
-      setTimeout(() => {
-        logger.error('Shutdown timeout exceeded — forcing exit');
-        process.exit(1);
-      }, SHUTDOWN_TIMEOUT_MS).unref();
-    }
-
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
-  } catch (err) {
-    logger.error({ err }, 'Failed to start API');
-    process.exit(1);
-  }
-}
-
-start();
-
-export default app;
+startServer();
