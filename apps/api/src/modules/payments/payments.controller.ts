@@ -17,15 +17,18 @@ import { AppRole } from '@api/types/express';
 import { stellarClient } from './services/stellar-client';
 import logger from '@api/utils/logger';
 
-const router = Router();
-router.use(authenticate);
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
 
-// Roles permitted to view payment records
-const PAYMENT_READ_ROLES: AppRole[] = ['SUPER_ADMIN', 'CLINIC_ADMIN'];
+@Controller('payments')
+export class PaymentsController {
+  constructor(
+    private httpService: HttpService,
+    private configService: ConfigService,
+  ) {}
 
-function canReadPayments(role: AppRole): boolean {
-  return PAYMENT_READ_ROLES.includes(role);
-}
+  private readonly stellarSecret = this.configService.get('STELLAR_SERVICE_SECRET');
+  private readonly stellarUrl = `http://localhost:${this.configService.get('STELLAR_PORT') || 3002}`;
 
 // GET /payments — paginated list scoped to the authenticated clinic
 router.get(
@@ -172,40 +175,35 @@ router.patch(
 
     const updatedPayment = await PaymentRecordModel.findByIdAndUpdate(
       payment._id,
-      { status: 'confirmed', txHash, confirmedAt: new Date() },
-      { new: true },
-    );
+      {
+        headers: {
+          'Authorization': `Bearer ${this.stellarSecret}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    ).toPromise();
+    
+    return response.data;
+  }
 
-    logger.info({
-      event: 'payment_confirmed',
-      intentId,
-      txHash,
-      amount: payment.amount,
-      assetCode: payment.assetCode,
-    });
+  async createIntent(fromPublicKey: string, toPublicKey: string, amount: number) {
+    const response = await this.httpService.post(
+      `${this.stellarUrl}/intent`,
+      { fromPublicKey, toPublicKey, amount },
+      {
+        headers: {
+          'Authorization': `Bearer ${this.stellarSecret}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    ).toPromise();
+    
+    return response.data;
+  }
 
-    res.json({
-      status: 'success',
-      message: 'Payment confirmed successfully',
-      data: toPaymentResponse(updatedPayment!),
-    });
-  }),
-);
-
-router.get(
-  '/:id',
-  validateRequest({ params: objectIdSchema }),
-  asyncHandler(async (req: Request, res: Response) => {
-    const payment = await PaymentRecordModel.findOne({
-      _id: req.params.id,
-      clinicId: req.user!.clinicId,
-    });
-    if (!payment) {
-      return res.status(404).json({ error: 'NotFound', message: 'Payment not found' });
-    }
-
-    res.json({ status: 'success', data: toPaymentResponse(payment) });
-  }),
-);
-
-export const paymentRoutes = router;
+  // Verify is public - no secret needed
+  async verifyIntent(hash: string) {
+    const response = await this.httpService.get(`${this.stellarUrl}/verify/${hash}`).toPromise();
+    return response.data;
+  }
+}
