@@ -1,26 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ErrorMessage, Toast, SlideOver, PageWrapper, PageHeader } from '@/components/ui';
-import { PaymentTable, type Payment } from '@/components/payments/PaymentTable';
-import { PaymentIntentForm, type PaymentIntentData } from '@/components/forms/PaymentIntentForm';
-import { Button } from '@/components/ui/Button';
-import { queryKeys } from '@/lib/queryKeys';
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ErrorMessage,
+  Toast,
+  SlideOver,
+  PageWrapper,
+  PageHeader,
+} from "@/components/ui";
+import { PaymentTable, type Payment } from "@/components/payments/PaymentTable";
+import {
+  PaymentIntentForm,
+  type PaymentIntentData,
+} from "@/components/forms/PaymentIntentForm";
+import { Button } from "@/components/ui/Button";
+import { queryKeys } from "@/lib/queryKeys";
+import { API_URL } from "@/lib/api";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
-const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
-
-function getPaymentsErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) return 'Unable to load payments right now.';
-  if (error.message.includes('Failed to fetch')) {
-    return 'Unable to reach the server. Please check your connection and try again.';
-  }
-  if (error.message.startsWith('Request failed')) {
-    return 'Unable to load payments right now. Please try again.';
-  }
-  return error.message;
-}
+const API = `${API_URL}/api/v1`;
+const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? "testnet";
 
 export default function PaymentsClient() {
   const queryClient = useQueryClient();

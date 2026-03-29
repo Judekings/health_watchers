@@ -6,10 +6,11 @@ import { ErrorMessage, Toast, TableSkeleton, Button } from '@/components/ui';
 import {
   CreateEncounterForm,
   type CreateEncounterData,
-} from '@/components/forms/CreateEncounterForm';
-import { queryKeys } from '@/lib/queryKeys';
+} from "@/components/forms/CreateEncounterForm";
+import { queryKeys } from "@/lib/queryKeys";
+import { API_URL } from "@/lib/api";
 
-const API = 'http://localhost:3001/api/v1';
+const API = `${API_URL}/api/v1`;
 
 interface Encounter {
   id: string;
