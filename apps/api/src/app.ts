@@ -2,8 +2,10 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
+import morgan from 'morgan';
 import mongoose from 'mongoose';
 import {config} from '@health-watchers/config';
+import logger from './utils/logger';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -51,6 +53,29 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || ['http://localhost:3000', 'http://localhost:3001'],
   credentials: true,
 }));
+
+// ========================
+// HTTP REQUEST LOGGING
+// ========================
+
+// 4. Morgan - HTTP request logger
+// Route output through the structured pino logger
+const morganStream = {
+  write: (message: string) => logger.info(message.trimEnd()),
+};
+
+const isProd = process.env.NODE_ENV === 'production';
+
+// In production, skip /health to reduce noise
+const skipHealthInProd = (req: express.Request) =>
+  isProd && req.path === '/health';
+
+app.use(
+  morgan(isProd ? 'combined' : 'dev', {
+    stream: morganStream,
+    skip: skipHealthInProd,
+  }),
+);
 
 // Body parsers
 app.use(express.json({ limit: '10mb' }));
