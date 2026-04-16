@@ -8,17 +8,12 @@ Sentry.init({
 
   // Performance monitoring
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
-  profilesSampleRate: 1.0,
 
   // Alert thresholds are configured in the Sentry dashboard:
   // - Error rate alert: > 1% over 5 min window
   // - p95 latency alert: > 2000ms
 
-  beforeSend(event) {
-    return scrubPHI(event);
-  },
-
-  beforeSendTransaction(event) {
+  beforeSend(event: Sentry.Event) {
     return scrubPHI(event);
   },
 });

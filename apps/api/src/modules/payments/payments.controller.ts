@@ -3,7 +3,6 @@ import { config } from '@health-watchers/config';
 import { PaymentRecordModel } from './models/payment-record.model';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
-import { objectIdSchema } from '@api/middlewares/objectid.schema';
 import {
   createPaymentIntentSchema,
   confirmPaymentSchema,
@@ -13,22 +12,16 @@ import {
 } from './payments.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import { toPaymentResponse } from './payments.transformer';
-import { AppRole } from '@api/types/express';
 import { stellarClient } from './services/stellar-client';
 import logger from '@api/utils/logger';
+import { randomUUID } from 'crypto';
 
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
+const router = Router();
+router.use(authenticate);
 
-@Controller('payments')
-export class PaymentsController {
-  constructor(
-    private httpService: HttpService,
-    private configService: ConfigService,
-  ) {}
-
-  private readonly stellarSecret = this.configService.get('STELLAR_SERVICE_SECRET');
-  private readonly stellarUrl = `http://localhost:${this.configService.get('STELLAR_PORT') || 3002}`;
+function canReadPayments(role: string): boolean {
+  return ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT', 'READ_ONLY'].includes(role);
+}
 
 // GET /payments — paginated list scoped to the authenticated clinic
 router.get(
@@ -36,9 +29,7 @@ router.get(
   validateRequest({ query: listPaymentsQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
     if (!canReadPayments(req.user!.role)) {
-      return res
-        .status(403)
-        .json({ error: 'Forbidden', message: 'Insufficient permissions to view payments' });
+      return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions to view payments' });
     }
 
     const { patientId, status, page, limit } = req.query as unknown as ListPaymentsQuery;
@@ -52,7 +43,7 @@ router.get(
       PaymentRecordModel.countDocuments(filter),
     ]);
 
-    res.json({
+    return res.json({
       status: 'success',
       data: payments.map(toPaymentResponse),
       meta: { total, page, limit },
@@ -60,24 +51,23 @@ router.get(
   }),
 );
 
+// POST /payments/intent
 router.post(
   '/intent',
   validateRequest({ body: createPaymentIntentSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { intentId, amount, destination, memo, patientId, assetCode = 'XLM', issuer } = req.body;
-
+    const { amount, destination, memo, patientId, assetCode = 'XLM', issuer } = req.body;
+    const intentId = randomUUID();
     const clinicId = req.user!.clinicId;
     const normalizedAsset = String(assetCode).toUpperCase().trim();
 
-    // XLM is always supported natively; other assets must be in the allow-list
     if (normalizedAsset !== 'XLM' && !config.supportedAssets.includes(normalizedAsset)) {
       return res.status(400).json({
         error: 'UnsupportedAsset',
-        message: `Asset '${normalizedAsset}' is not supported. Supported assets: ${config.supportedAssets.join(', ')}`,
+        message: `Asset '${normalizedAsset}' is not supported. Supported: ${config.supportedAssets.join(', ')}`,
       });
     }
 
-    // Non-native assets require an issuer account
     if (normalizedAsset !== 'XLM' && !issuer) {
       return res.status(400).json({
         error: 'BadRequest',
@@ -97,13 +87,14 @@ router.post(
       assetIssuer: normalizedAsset === 'XLM' ? null : issuer,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       status: 'success',
       data: { ...toPaymentResponse(record), platformPublicKey: config.stellar.platformPublicKey },
     });
   }),
 );
 
+// PATCH /payments/:intentId/confirm
 router.patch(
   '/:intentId/confirm',
   validateRequest({ params: confirmPaymentParamsSchema, body: confirmPaymentSchema }),
@@ -113,30 +104,21 @@ router.patch(
 
     const payment = await PaymentRecordModel.findOne({ intentId, clinicId: req.user!.clinicId });
     if (!payment) {
-      return res
-        .status(404)
-        .json({ error: 'NotFound', message: `Payment intent '${intentId}' not found` });
+      return res.status(404).json({ error: 'NotFound', message: `Payment intent '${intentId}' not found` });
     }
 
     if (payment.status === 'confirmed') {
-      return res
-        .status(409)
-        .json({ error: 'AlreadyConfirmed', message: 'This payment has already been confirmed' });
+      return res.status(409).json({ error: 'AlreadyConfirmed', message: 'This payment has already been confirmed' });
     }
 
     if (payment.status === 'failed') {
-      return res
-        .status(400)
-        .json({ error: 'AlreadyFailed', message: 'This payment has already failed' });
+      return res.status(400).json({ error: 'AlreadyFailed', message: 'This payment has already failed' });
     }
 
     const verification = await stellarClient.verifyTransaction(txHash);
 
     if (!verification.found || !verification.transaction) {
-      await PaymentRecordModel.findByIdAndUpdate(payment._id, {
-        status: 'failed',
-        txHash,
-      });
+      await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
       return res.status(400).json({
         error: 'TransactionNotFound',
         message: verification.error || 'Transaction not found on Stellar blockchain',
@@ -164,8 +146,7 @@ router.patch(
     }
 
     const txAssetCode = tx.asset.split(':')[0].toUpperCase();
-    const expectedAssetCode = payment.assetCode.toUpperCase();
-    if (txAssetCode !== expectedAssetCode) {
+    if (txAssetCode !== payment.assetCode.toUpperCase()) {
       await PaymentRecordModel.findByIdAndUpdate(payment._id, { status: 'failed', txHash });
       return res.status(400).json({
         error: 'AssetMismatch',
@@ -175,35 +156,13 @@ router.patch(
 
     const updatedPayment = await PaymentRecordModel.findByIdAndUpdate(
       payment._id,
-      {
-        headers: {
-          'Authorization': `Bearer ${this.stellarSecret}`,
-          'Content-Type': 'application/json',
-        },
-      },
-    ).toPromise();
-    
-    return response.data;
-  }
+      { status: 'confirmed', txHash, confirmedAt: new Date() },
+      { new: true },
+    );
 
-  async createIntent(fromPublicKey: string, toPublicKey: string, amount: number) {
-    const response = await this.httpService.post(
-      `${this.stellarUrl}/intent`,
-      { fromPublicKey, toPublicKey, amount },
-      {
-        headers: {
-          'Authorization': `Bearer ${this.stellarSecret}`,
-          'Content-Type': 'application/json',
-        },
-      },
-    ).toPromise();
-    
-    return response.data;
-  }
+    logger.info({ intentId, txHash }, 'Payment confirmed');
+    return res.json({ status: 'success', data: toPaymentResponse(updatedPayment!) });
+  }),
+);
 
-  // Verify is public - no secret needed
-  async verifyIntent(hash: string) {
-    const response = await this.httpService.get(`${this.stellarUrl}/verify/${hash}`).toPromise();
-    return response.data;
-  }
-}
+export const paymentRoutes = router;

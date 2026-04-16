@@ -13,7 +13,7 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
   });
 
   // JWT authentication middleware
-  io.use((socket: Socket, next) => {
+  io.use((socket: Socket, next: (err?: Error) => void) => {
     const token =
       socket.handshake.auth?.token ||
       socket.handshake.headers?.authorization?.replace('Bearer ', '');

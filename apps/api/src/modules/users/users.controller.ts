@@ -1,11 +1,10 @@
 import { Request, Response, Router } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { authenticator } from "otplib";
-import QRCode from "qrcode";
 import { authenticate } from "@api/middlewares/auth.middleware";
 import { validateRequest } from "@api/middlewares/validate.middleware";
 import { UserModel } from "../auth/models/user.model";
+import { totpService } from "../auth/totp.service";
 
 const updateProfileSchema = z.object({
   fullName: z.string().min(1, "Full name is required").max(100),
@@ -48,7 +47,7 @@ const router = Router();
  *         description: Unauthorized
  */
 router.get("/me", authenticate, async (req: Request, res: Response) => {
-  const user = await UserModel.findById(req.user!.userId).lean();
+  const user = await UserModel.findById(req.user!.userId);
   if (!user) {
     return res
       .status(401)
@@ -223,10 +222,7 @@ router.post(
         .json({ error: "Unauthorized", message: "User not found" });
     }
 
-    const secret = authenticator.generateSecret();
-    const otpauth = authenticator.keyuri(user.email, "HealthWatchers", secret);
-    const qrCodeUrl = await QRCode.toDataURL(otpauth);
-
+    const { secret, otpauthUrl: otpauth, qrCodeDataUrl: qrCodeUrl } = await totpService.setup(user.email);
     user.mfaSecret = secret;
     await user.save();
 
@@ -276,10 +272,7 @@ router.post(
         .json({ error: "Unauthorized", message: "User not found" });
     }
 
-    const isValid = authenticator.verify({
-      token: req.body.code,
-      secret: user.mfaSecret ?? "",
-    });
+    const isValid = totpService.verify(req.body.code, user.mfaSecret ?? "");
 
     if (!isValid) {
       return res.status(400).json({
@@ -401,4 +394,4 @@ router.patch(
   },
 );
 
-export const usersRoutes = router;
+export const userRoutes = router;

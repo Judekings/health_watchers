@@ -21,7 +21,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
       .json({ error: "Unauthorized", message: "Invalid or expired token" });
   }
 
-  req.user = payload;
+  req.user = { userId: payload.userId, role: payload.role as AppRole, clinicId: payload.clinicId };
   return next();
 }
 

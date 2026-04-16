@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { asyncHandler } from '@api/middlewares/async.handler';
-import { AuditLogModel } from './audit-log.model';
+import { AuditLogModel } from './audit.model';
 import { parsePagination } from '@api/utils/paginate';
 
 const router = Router();
@@ -25,11 +25,7 @@ router.get(
         : { clinicId: req.user!.clinicId };
 
     const [logs, total] = await Promise.all([
-      AuditLogModel.find(filter)
-        .sort({ timestamp: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean(),
+      AuditLogModel.find(filter).sort({ timestamp: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       AuditLogModel.countDocuments(filter),
     ]);
 

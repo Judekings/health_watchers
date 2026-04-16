@@ -25,7 +25,8 @@ function sanitizeAll(docs: Record<string, any>[]): Record<string, any>[] {
 export async function buildPatientRecord(patientId: string) {
   if (!Types.ObjectId.isValid(patientId)) return null;
 
-  const patient = await PatientModel.findById(patientId).lean();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patient = await PatientModel.findById(patientId).lean() as any;
   if (!patient) return null;
 
   const [encounters, payments] = await Promise.all([
@@ -124,8 +125,9 @@ export function sendPatientPdf(
 // ─── Clinic export helper ──────────────────────────────────────────────────
 
 export async function buildClinicRecord(clinicId: string) {
-  const patients   = await PatientModel.find({ clinicId }).lean();
-  const patientIds = patients.map(p => p._id);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patients = await PatientModel.find({ clinicId }).lean() as any[];
+  const patientIds = patients.map((p: any) => p._id);
 
   const [encounters, payments, staff] = await Promise.all([
     EncounterModel.find({ patientId: { $in: patientIds } }).lean(),
@@ -150,7 +152,7 @@ export function sendClinicZip(
 
   const archive = archiver('zip', { zlib: { level: 9 } });
 
-  archive.on('error', (err) => {
+  archive.on('error', (err: Error) => {
     console.error('[export] archiver error:', err);
     res.destroy(err);
   });

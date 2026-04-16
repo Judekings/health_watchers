@@ -1,10 +1,10 @@
+import './config/env'; // must be first — validates env vars
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
 import morgan from 'morgan';
-import mongoose from 'mongoose';
-import { config } from '@health-watchers/config';
+import mongoSanitize from 'express-mongo-sanitize';
 import { connectDB } from './config/db';
 import { authRoutes } from './modules/auth/auth.controller';
 import { userRoutes } from './modules/users/users.controller';
@@ -29,68 +29,52 @@ import logger from './utils/logger';
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// ========================
-// SECURITY & PERFORMANCE MIDDLEWARE
-// ========================
-
-// 1. Helmet (Security) - First
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:"],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-    },
-    credentials: true,
-  }),
-);
-
-app.options('*', cors());
-
 // Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 50kb)
 const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? '50kb';
 // AI routes allow larger payloads for summarization (default 500kb)
 const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '500kb';
 
-// ========================
-// HTTP REQUEST LOGGING
-// ========================
+// ── Security & performance ────────────────────────────────────────────────────
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  }),
+);
+app.use(compression());
+app.options('*', cors());
 
-// 4. Morgan - HTTP request logger
-// Route output through the structured pino logger
-const morganStream = {
-  write: (message: string) => logger.info(message.trimEnd()),
-};
-
+// ── HTTP request logging ──────────────────────────────────────────────────────
 const isProd = process.env.NODE_ENV === 'production';
-
-// In production, skip /health to reduce noise
-const skipHealthInProd = (req: express.Request) =>
-  isProd && req.path === '/health';
-
+const morganStream = { write: (msg: string) => logger.info(msg.trimEnd()) };
 app.use(
   morgan(isProd ? 'combined' : 'dev', {
     stream: morganStream,
-    skip: skipHealthInProd,
+  skip: (req: express.Request) => isProd && req.path === '/health',
   }),
 );
 
+// ── Body parsing & sanitization ───────────────────────────────────────────────
 app.use(express.json({ limit: standardLimit }));
-
-// Sanitize req.body, req.query, req.params — replace $ and . to block NoSQL injection
 app.use(mongoSanitize({ replaceWith: '_' }));
 
-app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'health-watchers-api' }));
+// ── Health check ──────────────────────────────────────────────────────────────
+app.get('/health', (_req, res) =>
+  res.json({ status: 'ok', service: 'health-watchers-api', timestamp: new Date().toISOString() }),
+);
 
-// Apply general rate limiter to all API routes
+// ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/v1', generalLimiter);
-
-// Apply strict rate limiter to auth routes (login + refresh brute-force protection)
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/clinics', clinicRoutes);
 app.use('/api/v1/users', userRoutes);
@@ -99,64 +83,39 @@ app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
-// Override limit for AI routes
 app.use('/api/v1/ai', express.json({ limit: aiLimit }), aiRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
 
 setupSwagger(app);
 
-// Global error handler — must be last
+// ── 404 & global error handler ────────────────────────────────────────────────
+app.use('*', (_req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
 app.use(errorHandler);
 
-async function start() {
-  try {
-    const mongoUri = config.mongoUri;
-    if (!mongoUri) {
-      console.error('❌ MONGO_URI is not defined');
-      process.exit(1);
-    }
+export default app;
 
-    await mongoose.connect(mongoUri);
-    const host = new URL(mongoUri).hostname;
-    console.log(`✅ MongoDB connected to ${host}`);
-  } catch (error: any) {
-    console.error('❌ MongoDB connection failed:', error.message);
-    process.exit(1);
-  }
-};
-
-// ========================
-// BASIC HEALTH ROUTE
-// ========================
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    message: 'Health Watchers API is running',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0',
-    compression: 'enabled'
-  });
-});
-
-// 404 Handler
-app.use('*', (req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found' });
-});
-
-// ========================
-// START SERVER
-// ========================
-const startServer = async () => {
+// ── Start server ──────────────────────────────────────────────────────────────
+async function startServer() {
   await connectDB();
 
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT} with gzip compression enabled`);
+  const server = app.listen(PORT, () => {
+    logger.info(`🚀 Server running on http://localhost:${PORT}`);
   });
-};
 
-process.on('unhandledRejection', (err: any) => {
-  console.error('Unhandled Rejection:', err.message);
+  startPaymentExpirationJob();
+
+  const shutdown = async () => {
+    stopPaymentExpirationJob();
+    server.close(() => process.exit(0));
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+}
+
+process.on('unhandledRejection', (err: unknown) => {
+  logger.error({ err }, 'Unhandled rejection');
   process.exit(1);
 });
 

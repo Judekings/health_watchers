@@ -37,15 +37,16 @@ patientSchema.pre('save', function () {
   if (this.address) this.address = sanitizeText(this.address);
   for (const field of PHI_FIELDS) {
     const val = this[field] as string | undefined;
-    if (val) (this as Record<string, unknown>)[field] = encrypt(val);
+    if (val) (this as unknown as Record<string, unknown>)[field] = encrypt(val);
   }
 });
 
-function decryptDoc(doc: Record<string, unknown> | null) {
-  if (!doc) return;
+function decryptDoc(doc: unknown) {
+  if (!doc || typeof doc !== 'object') return;
+  const d = doc as Record<string, unknown>;
   for (const field of PHI_FIELDS) {
-    const val = doc[field] as string | undefined;
-    if (val) doc[field] = decrypt(val);
+    const val = d[field] as string | undefined;
+    if (val) d[field] = decrypt(val);
   }
 }
 
