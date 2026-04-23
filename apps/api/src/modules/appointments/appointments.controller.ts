@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { AppointmentModel } from './appointment.model';
 import { authenticate } from '@api/middlewares/auth.middleware';
+import { sendAppointmentReminderEmail } from '@api/lib/email.service';
 
 export const appointmentRoutes = Router();
 
@@ -133,6 +134,27 @@ appointmentRoutes.post('/', async (req: Request, res: Response) => {
       reason,
       notes,
     });
+
+    // Schedule reminder email 24h before appointment (non-blocking)
+    try {
+      const { PatientModel } = await import('../patients/models/patient.model');
+      const { UserModel } = await import('../auth/models/user.model');
+      const [patient, doctor] = await Promise.all([
+        PatientModel.findById(patientId).lean(),
+        UserModel.findById(doctorId).lean(),
+      ]);
+      if (patient && doctor) {
+        const patientName = `${(patient as any).firstName} ${(patient as any).lastName}`;
+        const msUntilAppt = start.getTime() - Date.now();
+        const reminderDelay = msUntilAppt - 24 * 60 * 60 * 1000;
+        if (reminderDelay > 0 && doctor.email) {
+          setTimeout(
+            () => sendAppointmentReminderEmail(doctor.email!, patientName, start, doctor.fullName),
+            reminderDelay,
+          );
+        }
+      }
+    } catch { /* non-critical */ }
 
     return res.status(201).json({ status: 'success', data: appointment });
   } catch (err: any) {
