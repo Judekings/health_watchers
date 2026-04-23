@@ -25,6 +25,7 @@ import { authLimiter, forgotPasswordLimiter, aiLimiter, paymentLimiter, generalL
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
 import { labResultRoutes } from './modules/lab-results/lab-results.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
+import { apiVersionHeader } from './middlewares/versioning.middleware';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
 import {
   startPaymentExpirationJob,
@@ -111,6 +112,24 @@ app.use((req, res, next) => {
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) =>
   res.json({ status: 'ok', service: 'health-watchers-api', timestamp: new Date().toISOString() }),
+);
+
+// ── API version header on all /api/* responses ────────────────────────────────
+app.use('/api', apiVersionHeader('1.0'));
+
+// ── API versions endpoint ─────────────────────────────────────────────────────
+app.get('/api/versions', (_req, res) =>
+  res.json({
+    versions: [
+      {
+        version: 'v1',
+        status: 'current',
+        baseUrl: '/api/v1',
+        releaseDate: '2024-01-01',
+      },
+    ],
+    current: 'v1',
+  }),
 );
 
 // ── Routes ────────────────────────────────────────────────────────────────────
