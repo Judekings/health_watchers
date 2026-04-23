@@ -23,6 +23,7 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { authLimiter, forgotPasswordLimiter, aiLimiter, paymentLimiter, generalLimiter } from './middlewares/rate-limit.middleware';
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
+import { icd10Routes } from './modules/icd10/icd10.controller';
 import {
   startPaymentExpirationJob,
   stopPaymentExpirationJob,
@@ -112,6 +113,7 @@ app.use('/api/v1/audit-logs', auditLogRoutes);
 app.use('/api/v1/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
+app.use('/api/v1/icd10', icd10Routes);
 
 setupSwagger(app);
 
