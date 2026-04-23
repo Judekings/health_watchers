@@ -9,12 +9,17 @@ import {
   RegisterDto,
   MfaVerifyDto,
   MfaChallengeDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
   loginSchema,
   refreshSchema,
   registerSchema,
   mfaVerifySchema,
   mfaChallengeSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from './auth.validation';
+import { sendPasswordResetEmail } from '@api/lib/email.service';
 import { UserModel } from './models/user.model';
 import { ClinicModel } from '../clinics/clinic.model';
 import {
@@ -27,6 +32,7 @@ import {
 } from './token.service';
 import { RefreshTokenModel } from './models/refresh-token.model';
 import { totpService } from './totp.service';
+import { sendVerificationEmail } from '@api/lib/email.service';
 
 const router = Router();
 const INVALID = 'Invalid email or password';
@@ -90,7 +96,13 @@ router.post(
       clinicId: req.body.clinicId,
     });
 
-    const { password: _pw, ...sanitized } = user.toObject();
+    // Generate email verification token
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    user.emailVerificationTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    await user.save();
+    await sendVerificationEmail(user.email, rawToken);
+
+    const { password: _pw, emailVerificationTokenHash: _evth, ...sanitized } = user.toObject();
     return res.status(201).json({ status: 'success', data: sanitized });
   },
 );
@@ -356,5 +368,85 @@ router.post('/unlock', authenticate, async (req: Request, res: Response) => {
 
   return res.json({ status: 'success', data: { unlocked: true, email: user.email } });
 });
+
+/**
+ * @swagger
+ * /auth/verify-email:
+ *   get:
+ *     summary: Verify email address using the token sent during registration
+ *     tags: [Auth]
+ */
+router.get('/verify-email', async (req: Request, res: Response) => {
+  const token = String(req.query.token ?? '').trim();
+  if (!token) return res.status(400).json({ error: 'BadRequest', message: 'token is required' });
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const user = await UserModel.findOne({ emailVerificationTokenHash: tokenHash }).select(
+    '+emailVerificationTokenHash',
+  );
+
+  if (!user) return res.status(400).json({ error: 'BadRequest', message: 'Invalid or expired verification token' });
+
+  user.emailVerified = true;
+  user.emailVerificationTokenHash = undefined;
+  await user.save();
+
+  return res.json({ status: 'success', data: { emailVerified: true } });
+});
+const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * @swagger
+ * /auth/forgot-password:
+ *   post:
+ *     summary: Request a password reset email
+ *     tags: [Auth]
+ */
+router.post(
+  '/forgot-password',
+  validateRequest({ body: forgotPasswordSchema }),
+  async (req: Request<Record<string, never>, unknown, ForgotPasswordDto>, res: Response) => {
+    // Always return 200 to avoid email enumeration
+    const user = await UserModel.findOne({ email: req.body.email.toLowerCase().trim() });
+    if (user) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      user.resetPasswordTokenHash = hashToken(rawToken);
+      user.resetPasswordExpiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
+      await user.save();
+      await sendPasswordResetEmail(user.email, rawToken);
+    }
+    return res.json({ status: 'success', data: { message: 'If that email exists, a reset link has been sent.' } });
+  },
+);
+
+/**
+ * @swagger
+ * /auth/reset-password:
+ *   post:
+ *     summary: Reset password using a valid reset token
+ *     tags: [Auth]
+ */
+router.post(
+  '/reset-password',
+  validateRequest({ body: resetPasswordSchema }),
+  async (req: Request<Record<string, never>, unknown, ResetPasswordDto>, res: Response) => {
+    const tokenHash = hashToken(req.body.token);
+    const user = await UserModel.findOne({
+      resetPasswordTokenHash: tokenHash,
+      resetPasswordExpiresAt: { $gt: new Date() },
+    }).select('+resetPasswordTokenHash +resetPasswordExpiresAt');
+
+    if (!user) {
+      return res.status(400).json({ error: 'BadRequest', message: 'Invalid or expired reset token' });
+    }
+
+    user.password = req.body.newPassword;
+    user.resetPasswordTokenHash = undefined;
+    user.resetPasswordExpiresAt = undefined;
+    await user.save();
+
+    return res.json({ status: 'success', data: { message: 'Password has been reset successfully.' } });
+  },
+);
 
 export const authRoutes = router;

@@ -8,6 +8,10 @@
  * - POST /auth/logout: deletes the provided token's JTI
  * - POST /auth/logout-all: deletes all tokens for the user
  * - signRefreshToken includes unique JTI and family claims
+ * - Replay attack: consumed JTI revokes entire family
+ * - Logout: deletes the specific JTI
+ * - Logout-all: deletes all tokens for the user
+ * - Invalid/missing token handling
  */
 
 jest.mock('@health-watchers/config', () => ({
@@ -41,6 +45,8 @@ jest.mock('@api/utils/logger', () => ({
 }));
 
 import jwt from 'jsonwebtoken';
+import { UserModel } from '@api/modules/auth/models/user.model';
+import { RefreshTokenModel } from '@api/modules/auth/models/refresh-token.model';
 import {
   signRefreshToken,
   verifyRefreshToken,
@@ -50,6 +56,7 @@ import {
 } from './token.service';
 import { UserModel } from '@api/modules/auth/models/user.model';
 import { RefreshTokenModel } from '@api/modules/auth/models/refresh-token.model';
+} from './token.service';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -73,6 +80,14 @@ async function refreshHandler(
   res: ReturnType<typeof makeRes>,
 ) {
   const decoded = verifyRefreshToken(refreshToken);
+const USER_ID = '507f1f77bcf86cd799439011';
+const CLINIC_ID = '507f1f77bcf86cd799439022';
+const mockUser = { id: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID, isActive: true };
+
+// ── Inline handler logic (mirrors auth.controller.ts) ─────────────────────────
+
+async function refreshHandler(body: { refreshToken: string }, res: ReturnType<typeof makeRes>) {
+  const decoded = verifyRefreshToken(body.refreshToken);
   if (!decoded)
     return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
 
@@ -94,6 +109,7 @@ async function refreshHandler(
 
   const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
   const { token: newRefreshToken, jti, family } = signRefreshToken(p, decoded.family);
+  const { token: refreshToken, jti, family } = signRefreshToken(p, decoded.family);
   await (RefreshTokenModel as any).create({
     jti,
     userId: user.id,
@@ -110,6 +126,12 @@ async function refreshHandler(
 
 async function logoutHandler(refreshToken: string, res: ReturnType<typeof makeRes>) {
   const decoded = verifyRefreshToken(refreshToken);
+    data: { accessToken: signAccessToken(p), refreshToken },
+  });
+}
+
+async function logoutHandler(body: { refreshToken: string }, res: ReturnType<typeof makeRes>) {
+  const decoded = verifyRefreshToken(body.refreshToken);
   if (decoded) {
     await (RefreshTokenModel as any).deleteOne({ jti: decoded.jti });
   }
@@ -169,6 +191,20 @@ describe('POST /auth/refresh — token rotation', () => {
     const res = makeRes();
 
     await refreshHandler(token, res);
+describe('Refresh token rotation', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('issues new access + refresh tokens and marks old JTI consumed', async () => {
+    const { token, jti, family } = signRefreshToken({ userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID });
+    const saveMock = jest.fn().mockResolvedValue(undefined);
+    const existing = { jti, family, consumed: false, save: saveMock };
+
+    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue(existing);
+    (UserModel.findById as jest.Mock).mockResolvedValue(mockUser);
+    (RefreshTokenModel.create as jest.Mock).mockResolvedValue({});
+    const res = makeRes();
+
+    await refreshHandler({ refreshToken: token }, res);
 
     expect(existing.consumed).toBe(true);
     expect(saveMock).toHaveBeenCalledTimes(1);
@@ -220,6 +256,59 @@ describe('POST /auth/refresh — token rotation', () => {
     const res = makeRes();
 
     await refreshHandler(token, res);
+      expect.objectContaining({
+        status: 'success',
+        data: expect.objectContaining({ accessToken: expect.any(String), refreshToken: expect.any(String) }),
+      }),
+    );
+  });
+
+  it('new refresh token has a different JTI than the old one', async () => {
+    const { token, jti, family } = signRefreshToken({ userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID });
+    const saveMock = jest.fn().mockResolvedValue(undefined);
+    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({ jti, family, consumed: false, save: saveMock });
+    (UserModel.findById as jest.Mock).mockResolvedValue(mockUser);
+    (RefreshTokenModel.create as jest.Mock).mockResolvedValue({});
+    const res = makeRes();
+
+    await refreshHandler({ refreshToken: token }, res);
+
+    const newJti = (RefreshTokenModel.create as jest.Mock).mock.calls[0][0].jti;
+    expect(newJti).not.toBe(jti);
+  });
+
+  it('preserves the token family across rotation', async () => {
+    const { token, jti, family } = signRefreshToken({ userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID });
+    const saveMock = jest.fn().mockResolvedValue(undefined);
+    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({ jti, family, consumed: false, save: saveMock });
+    (UserModel.findById as jest.Mock).mockResolvedValue(mockUser);
+    (RefreshTokenModel.create as jest.Mock).mockResolvedValue({});
+    const res = makeRes();
+
+    await refreshHandler({ refreshToken: token }, res);
+
+    const createdFamily = (RefreshTokenModel.create as jest.Mock).mock.calls[0][0].family;
+    expect(createdFamily).toBe(family);
+  });
+
+  it('detects replay attack: revokes entire family when consumed JTI is presented', async () => {
+    const { token, jti, family } = signRefreshToken({ userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID });
+    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue({ jti, family, consumed: true });
+    const res = makeRes();
+
+    await refreshHandler({ refreshToken: token }, res);
+
+    expect(RefreshTokenModel.deleteMany).toHaveBeenCalledWith({ family });
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Unauthorized' }));
+  });
+
+  it('returns 401 when JTI not found in DB (already deleted/expired)', async () => {
+    const { token } = signRefreshToken({ userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID });
+    (RefreshTokenModel.findOne as jest.Mock).mockResolvedValue(null);
+    const res = makeRes();
+
+    await refreshHandler({ refreshToken: token }, res);
 
     expect(res.status).toHaveBeenCalledWith(401);
   });
@@ -229,6 +318,9 @@ describe('POST /auth/refresh — token rotation', () => {
 
     await refreshHandler('not.a.valid.token', res);
 
+  it('returns 401 for invalid JWT signature', async () => {
+    const res = makeRes();
+    await refreshHandler({ refreshToken: 'invalid.token.here' }, res);
     expect(res.status).toHaveBeenCalledWith(401);
     expect(RefreshTokenModel.findOne).not.toHaveBeenCalled();
   });
@@ -243,6 +335,12 @@ describe('POST /auth/logout', () => {
     const res = makeRes();
 
     await logoutHandler(token, res);
+  it('deletes the JTI from DB and returns loggedOut: true', async () => {
+    const { token, jti } = signRefreshToken({ userId: USER_ID, role: 'DOCTOR', clinicId: CLINIC_ID });
+    (RefreshTokenModel.deleteOne as jest.Mock).mockResolvedValue({ deletedCount: 1 });
+    const res = makeRes();
+
+    await logoutHandler({ refreshToken: token }, res);
 
     expect(RefreshTokenModel.deleteOne).toHaveBeenCalledWith({ jti });
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { loggedOut: true } }));
@@ -253,6 +351,9 @@ describe('POST /auth/logout', () => {
 
     await logoutHandler('invalid.token', res);
 
+  it('returns 200 even for an invalid token (graceful logout)', async () => {
+    const res = makeRes();
+    await logoutHandler({ refreshToken: 'bad.token' }, res);
     expect(RefreshTokenModel.deleteOne).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ status: 'success' }));
   });
@@ -275,5 +376,11 @@ describe('POST /auth/logout-all', () => {
 describe('REFRESH_TOKEN_EXPIRY_MS', () => {
   it('equals 7 days in milliseconds', () => {
     expect(REFRESH_TOKEN_EXPIRY_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+});
+    await logoutAllHandler(USER_ID, res);
+
+    expect(RefreshTokenModel.deleteMany).toHaveBeenCalledWith({ userId: USER_ID });
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { loggedOut: true } }));
   });
 });
