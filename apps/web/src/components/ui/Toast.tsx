@@ -50,6 +50,7 @@ export function Toast({ message, type = 'info', onClose, duration = 4000 }: Toas
       )}
     </div>
   );
+
 }
 
 // ─── Singleton Event Bus ──────────────────────────────────────────────────────
