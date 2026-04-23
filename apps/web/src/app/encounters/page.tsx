@@ -1,95 +1,103 @@
-import { useTranslations } from "next-intl";
-import EncountersClient from "./EncountersClient";
+// apps/web/src/app/encounters/page.tsx
 
-export default function EncountersPage() {
-  const t = useTranslations("encounters");
-  return (
-    <EncountersClient
-      labels={{
-        title: t("title"),
-        loading: t("loading"),
-        empty: t("empty"),
-        id: t("id"),
-        patient: t("patient"),
-        date: t("date"),
-        notes: t("notes"),
-      }}
-    />
 'use client';
-
 import { useState, useEffect } from 'react';
-import { PageWrapper, PageHeader, Card, CardContent } from '@/components/ui';
 
 interface Encounter {
-  id: string;
-  patientId: string;
-  date: string;
-  notes: string;
+  _id: string;
+  patientId: {
+    firstName: string;
+    lastName: string;
+    systemId: string;
+  };
+  status: string;
+  createdAt: string;
+  // ... other fields
+}
+
+interface ApiResponse {
+  status: string;
+  data: Encounter[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+  };
 }
 
 export default function EncountersPage() {
   const [encounters, setEncounters] = useState<Encounter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/v1/encounters')
-      .then(res => res.json())
-      .then(data => {
-        setEncounters(data || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
-  }, []);
+    fetchEncounters();
+  }, [page]);
 
-  if (loading) {
-    return (
-      <PageWrapper className="py-8">
-        <div className="flex items-center justify-center">
-          <p className="text-secondary-600">Loading encounters...</p>
-        </div>
-      </PageWrapper>
-    );
-  }
+  const fetchEncounters = async () => {
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+      });
+      
+      const response = await fetch(`/api/v1/encounters?${params}`);
+      const data: ApiResponse = await response.json();
+      
+      if (data.status === 'success') {
+        setEncounters(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch encounters:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div>Loading encounters...</div>;
 
   return (
-    <PageWrapper className="py-8">
-      <PageHeader title="Encounters" />
-      
-      <div className="space-y-4">
-        {encounters.map(encounter => (
-          <Card key={encounter.id}>
-            <CardContent className="space-y-2">
-              <div className="flex flex-wrap gap-4 text-sm">
-                <div>
-                  <span className="font-medium text-secondary-900">ID:</span>{' '}
-                  <span className="font-mono text-secondary-700">{encounter.id}</span>
-                </div>
-                <div>
-                  <span className="font-medium text-secondary-900">Patient:</span>{' '}
-                  <span className="text-secondary-700">{encounter.patientId}</span>
-                </div>
-                <div>
-                  <span className="font-medium text-secondary-900">Date:</span>{' '}
-                  <span className="text-secondary-700">{encounter.date}</span>
-                </div>
-              </div>
-              <div>
-                <span className="font-medium text-secondary-900">Notes:</span>{' '}
-                <span className="text-secondary-700">{encounter.notes}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        
-        {encounters.length === 0 && (
-          <div className="text-center py-8">
-            <p className="text-secondary-600">No encounters found. API stub - implement full.</p>
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">Encounters</h1>
+      <div className="grid gap-4">
+        {encounters.map((encounter) => (
+          <div key={encounter._id} className="p-4 border rounded-lg">
+            <div className="font-medium">
+              {encounter.patientId?.firstName} {encounter.patientId?.lastName}
+              <span className="text-sm text-gray-500 ml-2">
+                ({encounter.patientId?.systemId})
+              </span>
+            </div>
+            <div className="text-sm text-gray-600">
+              Status: <span className="font-semibold">{encounter.status}</span>
+            </div>
+            <div className="text-xs text-gray-500">
+              {new Date(encounter.createdAt).toLocaleDateString()}
+            </div>
           </div>
-        )}
+        ))}
       </div>
-    </PageWrapper>
+      
+      {/* Pagination */}
+      <div className="mt-6 flex justify-between">
+        <button
+          onClick={() => setPage(p => Math.max(1, p - 1))}
+          disabled={page === 1}
+          className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <span>
+          Page {page} of {Math.ceil(100 / limit)} {/* Replace 100 with meta.total */}
+        </span>
+        <button
+          onClick={() => setPage(p => p + 1)}
+          className="px-4 py-2 bg-blue-500 text-white rounded"
+        >
+          Next
+        </button>
+      </div>
+    </div>
   );
 }

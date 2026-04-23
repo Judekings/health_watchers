@@ -1,170 +1,268 @@
-import { Request, Response, Router } from 'express';
-import mongoose from 'mongoose';
-import { authenticate } from '../../middlewares/auth.middleware';
-import { validateRequest } from '../../middlewares/validate.middleware';
+import { Router, Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { AppointmentModel } from './appointment.model';
+import { authenticate } from '@api/middlewares/auth.middleware';
+import { validateRequest } from '@api/middlewares/validate.middleware';
 import {
   createAppointmentSchema,
   updateAppointmentSchema,
   cancelAppointmentSchema,
-  appointmentIdParamsSchema,
-  doctorIdParamsSchema,
   listAppointmentsQuerySchema,
   availabilityQuerySchema,
+  appointmentIdParamsSchema,
+  doctorIdParamsSchema,
 } from './appointments.validation';
 
-const router = Router();
+export const appointmentRoutes = Router();
+appointmentRoutes.use(authenticate);
 
-// Working hours: 08:00–17:00, slot duration 30 min
-const WORK_START_HOUR = 8;
-const WORK_END_HOUR   = 17;
-const SLOT_MINUTES    = 30;
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-// POST /api/v1/appointments
-router.post(
-  '/',
-  authenticate,
-  validateRequest({ body: createAppointmentSchema }),
-  async (req: Request, res: Response) => {
-    const clinicId = req.user?.clinicId;
-    if (!clinicId) return res.status(401).json({ error: 'Unauthorized' });
+async function hasConflict(
+  doctorId: string,
+  scheduledAt: Date,
+  duration: number,
+  excludeId?: string,
+): Promise<boolean> {
+  const proposedEnd = new Date(scheduledAt.getTime() + duration * 60_000);
 
-    const { scheduledAt, duration = 30, doctorId } = req.body;
-    const start = new Date(scheduledAt);
-    const end   = new Date(start.getTime() + duration * 60_000);
+  const query: Record<string, unknown> = {
+    doctorId: new Types.ObjectId(doctorId),
+    status: { $in: ['scheduled', 'confirmed'] },
+    scheduledAt: { $lt: proposedEnd },
+    $expr: {
+      $gt: [
+        { $add: ['$scheduledAt', { $multiply: ['$duration', 60_000] }] },
+        scheduledAt.getTime(),
+      ],
+    },
+  };
 
-    // Conflict detection
-    const conflict = await AppointmentModel.findOne({
-      doctorId,
-      status: { $nin: ['cancelled'] },
-      scheduledAt: { $lt: end },
-      $expr: {
-        $gt: [{ $add: ['$scheduledAt', { $multiply: ['$duration', 60_000] }] }, start.getTime()],
-      },
-    });
-    if (conflict) return res.status(409).json({ error: 'Conflict', message: 'Doctor already has an appointment in this time slot' });
+  if (excludeId) query._id = { $ne: new Types.ObjectId(excludeId) };
 
-    const appointment = await AppointmentModel.create({ ...req.body, clinicId });
-    return res.status(201).json({ status: 'success', data: appointment });
-  }
-);
+  return (await AppointmentModel.countDocuments(query)) > 0;
+}
 
-// GET /api/v1/appointments
-router.get(
-  '/',
-  authenticate,
-  validateRequest({ query: listAppointmentsQuerySchema }),
-  async (req: Request, res: Response) => {
-    const clinicId = req.user?.clinicId;
-    const role     = req.user?.role;
-    const userId   = req.user?.userId;
-    const { doctorId, patientId, status, dateFrom, dateTo, page, limit } = req.query as any;
-
-    const filter: Record<string, any> = { clinicId };
-
-    // RBAC: patients can only see their own appointments (stub — patient role not in current roles)
-    if (role === 'READ_ONLY' && userId) filter.patientId = userId;
-    if (doctorId)  filter.doctorId  = doctorId;
-    if (patientId) filter.patientId = patientId;
-    if (status)    filter.status    = status;
-    if (dateFrom || dateTo) {
-      filter.scheduledAt = {};
-      if (dateFrom) filter.scheduledAt.$gte = new Date(dateFrom);
-      if (dateTo)   filter.scheduledAt.$lte = new Date(dateTo);
-    }
-
-    const skip  = (Number(page) - 1) * Number(limit);
-    const [data, total] = await Promise.all([
-      AppointmentModel.find(filter).sort({ scheduledAt: 1 }).skip(skip).limit(Number(limit)),
-      AppointmentModel.countDocuments(filter),
-    ]);
-
-    return res.json({ status: 'success', data, meta: { total, page: Number(page), limit: Number(limit) } });
-  }
-);
-
-// GET /api/v1/appointments/doctor/:doctorId/availability
-router.get(
+// ── GET /appointments/doctor/:doctorId/availability ───────────────────────────
+appointmentRoutes.get(
   '/doctor/:doctorId/availability',
-  authenticate,
   validateRequest({ params: doctorIdParamsSchema, query: availabilityQuerySchema }),
   async (req: Request, res: Response) => {
-    const { doctorId } = req.params;
-    const { date }     = req.query as { date: string };
+    try {
+      const { doctorId } = req.params;
+      const { date } = req.query as { date: string };
 
-    const dayStart = new Date(`${date}T00:00:00.000Z`);
-    dayStart.setUTCHours(WORK_START_HOUR, 0, 0, 0);
-    const dayEnd = new Date(`${date}T00:00:00.000Z`);
-    dayEnd.setUTCHours(WORK_END_HOUR, 0, 0, 0);
+      const dayStart = new Date(date);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(date);
+      dayEnd.setHours(23, 59, 59, 999);
 
-    const booked = await AppointmentModel.find({
-      doctorId,
-      status: { $nin: ['cancelled'] },
-      scheduledAt: { $gte: dayStart, $lt: dayEnd },
-    }).select('scheduledAt duration');
+      const booked = await AppointmentModel.find({
+        doctorId: new Types.ObjectId(doctorId),
+        status: { $in: ['scheduled', 'confirmed'] },
+        scheduledAt: { $gte: dayStart, $lte: dayEnd },
+      })
+        .select('scheduledAt duration')
+        .sort({ scheduledAt: 1 })
+        .lean();
 
-    // Generate all slots
-    const slots: { time: string; available: boolean }[] = [];
-    for (let t = new Date(dayStart); t < dayEnd; t = new Date(t.getTime() + SLOT_MINUTES * 60_000)) {
-      const slotEnd = new Date(t.getTime() + SLOT_MINUTES * 60_000);
-      const busy = booked.some(appt => {
-        const aEnd = new Date(appt.scheduledAt.getTime() + appt.duration * 60_000);
-        return appt.scheduledAt < slotEnd && aEnd > t;
-      });
-      slots.push({ time: t.toISOString(), available: !busy });
+      // Generate 30-min slots from 08:00 to 17:00
+      const slots: { time: string; available: boolean }[] = [];
+      for (let h = 8; h < 17; h++) {
+        for (const m of [0, 30]) {
+          const slotStart = new Date(date);
+          slotStart.setHours(h, m, 0, 0);
+          const slotEnd = new Date(slotStart.getTime() + 30 * 60_000);
+
+          const occupied = booked.some((appt) => {
+            const apptEnd = new Date(
+              new Date(appt.scheduledAt).getTime() + appt.duration * 60_000,
+            );
+            return new Date(appt.scheduledAt) < slotEnd && apptEnd > slotStart;
+          });
+
+          slots.push({
+            time: slotStart.toISOString(),
+            available: !occupied,
+          });
+        }
+      }
+
+      return res.json({ status: 'success', data: slots });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'InternalError', message: err.message });
     }
-
-    return res.json({ status: 'success', data: { doctorId, date, slots } });
-  }
+  },
 );
 
-// GET /api/v1/appointments/:id
-router.get(
+// ── GET /appointments ─────────────────────────────────────────────────────────
+appointmentRoutes.get(
+  '/',
+  validateRequest({ query: listAppointmentsQuerySchema }),
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId, role, userId } = req.user!;
+      const { doctorId, patientId, status, dateFrom, dateTo, page, limit } =
+        req.query as any;
+
+      const filter: Record<string, unknown> = { clinicId };
+
+      // RBAC: patients can only see their own appointments
+      if (role === 'PATIENT') filter.patientId = userId;
+      else {
+        if (doctorId) filter.doctorId = new Types.ObjectId(doctorId);
+        if (patientId) filter.patientId = new Types.ObjectId(patientId);
+      }
+
+      if (status) filter.status = status;
+      if (dateFrom || dateTo) {
+        filter.scheduledAt = {};
+        if (dateFrom) (filter.scheduledAt as any).$gte = new Date(dateFrom);
+        if (dateTo) (filter.scheduledAt as any).$lte = new Date(dateTo);
+      }
+
+      const skip = (Number(page) - 1) * Number(limit);
+      const [data, total] = await Promise.all([
+        AppointmentModel.find(filter)
+          .sort({ scheduledAt: 1 })
+          .skip(skip)
+          .limit(Number(limit))
+          .lean(),
+        AppointmentModel.countDocuments(filter),
+      ]);
+
+      return res.json({
+        status: 'success',
+        data,
+        pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  },
+);
+
+// ── GET /appointments/:id ─────────────────────────────────────────────────────
+appointmentRoutes.get(
   '/:id',
-  authenticate,
   validateRequest({ params: appointmentIdParamsSchema }),
   async (req: Request, res: Response) => {
-    const appointment = await AppointmentModel.findOne({ _id: req.params.id, clinicId: req.user?.clinicId });
-    if (!appointment) return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
-    return res.json({ status: 'success', data: appointment });
-  }
+    try {
+      const { clinicId, role, userId } = req.user!;
+      const filter: Record<string, unknown> = { _id: req.params.id, clinicId };
+      if (role === 'PATIENT') filter.patientId = userId;
+
+      const appointment = await AppointmentModel.findOne(filter).lean();
+      if (!appointment)
+        return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
+
+      return res.json({ status: 'success', data: appointment });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  },
 );
 
-// PUT /api/v1/appointments/:id
-router.put(
+// ── POST /appointments ────────────────────────────────────────────────────────
+appointmentRoutes.post(
+  '/',
+  validateRequest({ body: createAppointmentSchema }),
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId } = req.user!;
+      const { patientId, doctorId, scheduledAt, duration, type, chiefComplaint, notes } = req.body;
+
+      const start = new Date(scheduledAt);
+
+      if (await hasConflict(doctorId, start, duration ?? 30)) {
+        return res.status(409).json({
+          error: 'TimeSlotUnavailable',
+          message: 'The doctor already has an appointment during this time slot',
+        });
+      }
+
+      const appointment = await AppointmentModel.create({
+        patientId,
+        doctorId,
+        clinicId,
+        scheduledAt: start,
+        duration: duration ?? 30,
+        type,
+        chiefComplaint,
+        notes,
+      });
+
+      return res.status(201).json({ status: 'success', data: appointment });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  },
+);
+
+// ── PUT /appointments/:id ─────────────────────────────────────────────────────
+appointmentRoutes.put(
   '/:id',
-  authenticate,
   validateRequest({ params: appointmentIdParamsSchema, body: updateAppointmentSchema }),
   async (req: Request, res: Response) => {
-    const appointment = await AppointmentModel.findOneAndUpdate(
-      { _id: req.params.id, clinicId: req.user?.clinicId },
-      req.body,
-      { new: true }
-    );
-    if (!appointment) return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
-    return res.json({ status: 'success', data: appointment });
-  }
+    try {
+      const { clinicId } = req.user!;
+      const existing = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
+      if (!existing)
+        return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
+
+      const { scheduledAt, duration, type, status, chiefComplaint, notes, encounterId } = req.body;
+
+      const newStart = scheduledAt ? new Date(scheduledAt) : existing.scheduledAt;
+      const newDuration = duration ?? existing.duration;
+      const newDoctorId = String(existing.doctorId);
+
+      if ((scheduledAt || duration) && await hasConflict(newDoctorId, newStart, newDuration, req.params.id)) {
+        return res.status(409).json({
+          error: 'TimeSlotUnavailable',
+          message: 'The doctor already has an appointment during this time slot',
+        });
+      }
+
+      const updated = await AppointmentModel.findByIdAndUpdate(
+        req.params.id,
+        { scheduledAt: newStart, duration: newDuration, type, status, chiefComplaint, notes, encounterId },
+        { new: true, runValidators: true },
+      ).lean();
+
+      return res.json({ status: 'success', data: updated });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  },
 );
 
-// DELETE /api/v1/appointments/:id  (cancel — requires reason)
-router.delete(
+// ── DELETE /appointments/:id (cancel) ─────────────────────────────────────────
+appointmentRoutes.delete(
   '/:id',
-  authenticate,
   validateRequest({ params: appointmentIdParamsSchema, body: cancelAppointmentSchema }),
   async (req: Request, res: Response) => {
-    const appointment = await AppointmentModel.findOneAndUpdate(
-      { _id: req.params.id, clinicId: req.user?.clinicId, status: { $nin: ['cancelled', 'completed'] } },
-      {
-        status: 'cancelled',
-        cancelledBy: new mongoose.Types.ObjectId(req.user!.userId),
-        cancelledAt: new Date(),
-        cancellationReason: req.body.cancellationReason,
-      },
-      { new: true }
-    );
-    if (!appointment) return res.status(404).json({ error: 'NotFound', message: 'Appointment not found or already cancelled/completed' });
-    return res.json({ status: 'success', data: appointment });
-  }
-);
+    try {
+      const { clinicId, userId } = req.user!;
+      const appointment = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
+      if (!appointment)
+        return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
 
-export const appointmentRoutes = router;
+      const { cancellationReason } = req.body;
+
+      const updated = await AppointmentModel.findByIdAndUpdate(
+        req.params.id,
+        {
+          status: 'cancelled',
+          cancelledBy: new Types.ObjectId(userId),
+          cancelledAt: new Date(),
+          cancellationReason,
+        },
+        { new: true },
+      ).lean();
+
+      return res.json({ status: 'success', data: updated });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  },
+);

@@ -1,69 +1,94 @@
-import { config } from "@health-watchers/config";
-import Server from "@stellar/stellar-sdk"; // Default import for v12+
-import { Keypair, TransactionBuilder, Operation, Asset, BASE_FEE } from "@stellar/stellar-sdk";
-import express, { Request, Response } from "express";
-import fetch from "node-fetch";
+// apps/stellar-service/src/index.ts
 
-const horizon: Server = new Server(config.stellarHorizonUrl);
+import crypto from 'crypto';
+import express from 'express';
+import { Server } from 'http';
+import pinoHttp from 'pino-http';
+import { fundAccount, createIntent, verifyIntent, getAccountBalance } from './stellar.js';
+import dotenv from 'dotenv';
+import logger from './logger.js';
+
+dotenv.config();
+
 const app = express();
-app.use(express.json());
+const PORT = process.env.STELLAR_PORT || 3002;
+const SHARED_SECRET = process.env.STELLAR_SERVICE_SECRET;
 
-app.get("/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", service: "health-watchers-stellar-service" });
-});
+if (!SHARED_SECRET) {
+  logger.error('STELLAR_SERVICE_SECRET required');
+  process.exit(1);
+}
 
-app.post("/fund", async (req: Request, res: Response) => {
-  const { publicKey } = req.body;
-  if (!publicKey) return res.status(400).json({ error: "publicKey required" });
-  try {
-    const response = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
-    const data = await response.json();
-    res.json({ success: true, data });
-  } catch (error: unknown) {
-    const err = error as Error;
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/intent", async (req: Request, res: Response) => {
-  const { fromSecret, toPublic, amount, assetCode = "XLM", issuer } = req.body;
-  if (!fromSecret || !toPublic || !amount) return res.status(400).json({ error: "fromSecret, toPublic, amount required" });
+// Middleware: Validate Shared Secret (ONLY for mutating endpoints)
+const requireSecret = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const authHeader = req.headers.authorization;
   
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing Authorization header' });
+  }
+  
+  const token = authHeader.substring(7); // Remove "Bearer "
+  
+  if (token !== SHARED_SECRET) {
+    return res.status(401).json({ error: 'Invalid secret' });
+  }
+  
+  next();
+};
+
+app.use(express.json());
+app.use(pinoHttp({
+  logger,
+  genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
+  redact: ['req.headers.authorization'],
+}));
+
+// ✅ PROTECTED: POST /fund (requires secret)
+app.post('/fund', requireSecret, async (req, res) => {
   try {
-    const fromKeypair = Keypair.fromSecret(fromSecret);
-    const account = await horizon.loadAccount(fromKeypair.publicKey());
-    const asset = issuer ? new Asset(assetCode, issuer) : Asset.native();
-    
-    const tx = new TransactionBuilder(account, {
-      fee: BASE_FEE.toString(),
-      networkPassphrase: config.stellarNetwork === "mainnet" ? "Public Global Stellar Network ; September 2015" : "Test SDF Network ; September 2015",
-    })
-      .addOperation(Operation.payment({ destination: toPublic, asset, amount: amount.toString() }))
-      .setTimeout(30)
-      .build();
-    
-    tx.sign(fromKeypair);
-    const result = await horizon.submitTransaction(tx);
-    res.json({ success: true, transactionHash: result.hash });
-  } catch (error: unknown) {
-    const err = error as Error;
-    res.status(500).json({ error: err.message });
+    const { publicKey, amount } = req.body;
+    const result = await fundAccount(publicKey, amount);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-app.get("/verify/:hash", async (req: Request, res: Response) => {
-  const { hash } = req.params;
+// ✅ PROTECTED: POST /intent (requires secret)
+app.post('/intent', requireSecret, async (req, res) => {
   try {
-    const tx = await horizon.loadTransaction(hash);
-    res.json({ success: true, transaction: tx });
-  } catch (error: unknown) {
-    const err = error as Error;
-    res.status(404).json({ error: "Transaction not found: " + err.message });
+    const { fromPublicKey, toPublicKey, amount } = req.body;
+    const result = await createIntent(fromPublicKey, toPublicKey, amount);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-const port = process.env.STELLAR_SERVICE_PORT || process.env.STELLAR_PORT || 3002;
-app.listen(Number(port), () => {
-  console.log(`Health Watchers Stellar Service on port ${port}, network: ${config.stellarNetwork}`);
+// ✅ PUBLIC: GET /verify/:hash (no auth needed)
+app.get('/verify/:hash', async (req, res) => {
+  try {
+    const { hash } = req.params;
+    const result = await verifyIntent(hash);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
+// ✅ PROTECTED: GET /balance/:publicKey (requires secret)
+app.get('/balance/:publicKey', requireSecret, async (req, res) => {
+  try {
+    const { publicKey } = req.params;
+    const result = await getAccountBalance(publicKey);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+const server: Server = app.listen(PORT, () => {
+  logger.info({ port: PORT, secret: SHARED_SECRET ? 'SET' : 'MISSING' }, 'Stellar Service running');
+});
+
+export default server;

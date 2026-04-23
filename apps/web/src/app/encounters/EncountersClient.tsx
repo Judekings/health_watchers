@@ -1,6 +1,16 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ErrorMessage, Toast, TableSkeleton, Button } from '@/components/ui';
+import {
+  CreateEncounterForm,
+  type CreateEncounterData,
+} from "@/components/forms/CreateEncounterForm";
+import { queryKeys } from "@/lib/queryKeys";
+import { API_URL } from "@/lib/api";
+
+const API = `${API_URL}/api/v1`;
 
 interface Encounter {
   id: string;
@@ -19,34 +29,87 @@ interface Labels {
   notes: string;
 }
 
-export default function EncountersClient({ labels }: { labels: Labels }) {
-  const [encounters, setEncounters] = useState<Encounter[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("http://localhost:3001/api/v1/encounters")
-      .then((res) => res.json())
-      .then((data) => { setEncounters(data || []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return (
-      <p role="status" aria-live="polite" className="px-4 py-8 text-gray-500">
-      <p role="status" aria-live="polite" style={{ padding: "2rem" }}>
-        {labels.loading}
-      </p>
-    );
+function getEncounterErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return 'Unable to load encounters right now.';
+  if (error.message.includes('Failed to fetch')) {
+    return 'Unable to reach the server. Please check your connection and try again.';
   }
+  if (error.message.startsWith('Request failed')) {
+    return 'Unable to load encounters right now. Please try again.';
+  }
+  return error.message;
+}
+
+export default function EncountersClient({ labels }: { labels: Labels }) {
+  const queryClient = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: 'success' | 'error';
+  } | null>(null);
+
+  const { data: encounters = [], isLoading, error } = useEncounters();
+
+  const handleCreate = async (data: CreateEncounterData) => {
+    const res = await fetch(`${API}/encounters`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || `Error ${res.status}`);
+    }
+    setShowForm(false);
+    setToast({ message: 'Encounter created successfully.', type: 'success' });
+    queryClient.invalidateQueries({ queryKey: queryKeys.encounters.list() });
+  };
+
+  if (isLoading) return <TableSkeleton columns={6} rows={5} />;
+  if (error)
+    return (
+      <ErrorMessage
+        message={getEncounterErrorMessage(error)}
+        onRetry={() =>
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.encounters.list(),
+          })
+        }
+      />
+    );
 
   return (
     <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6">{labels.title}</h1>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{labels.title}</h1>
+        <button
+          onClick={() => setShowForm(true)}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          + New Encounter
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="mb-8 rounded-lg border border-gray-200 p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">New Encounter</h2>
+          <CreateEncounterForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
+        </div>
+      )}
+
       {encounters.length === 0 ? (
-        <p role="status" className="text-gray-500">{labels.empty}</p>
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-6 py-12 text-center">
+          <h2 className="text-lg font-semibold text-gray-900">No records found</h2>
+          <p className="mt-2 text-sm text-gray-600">{labels.empty}</p>
+          <Button variant="primary" size="md" className="mt-5" onClick={() => setShowForm(true)}>
+            Create Encounter
+          </Button>
+        </div>
       ) : (
         <ul aria-label={labels.title} className="flex flex-col gap-4 list-none p-0 m-0">
-          {encounters.map((e) => (
+          {encounters.map((e: Encounter) => (
             <li key={e.id} className="rounded border border-gray-200 p-4 shadow-sm">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
                 <div>
@@ -66,28 +129,6 @@ export default function EncountersClient({ labels }: { labels: Labels }) {
                   <p className="text-gray-700">{e.notes}</p>
                 </div>
               </div>
-  if (loading) return <p style={{ padding: "2rem" }}>{labels.loading}</p>;
-
-  return (
-    <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1>{labels.title}</h1>
-      {encounters.length === 0 ? (
-        <p role="status">{labels.empty}</p>
-      ) : (
-        <ul aria-label={labels.title}>
-          {encounters.map((e) => (
-            <li key={e.id} style={{ margin: "10px 0", padding: "10px", border: "1px solid #ddd" }}>
-              <span><strong>{labels.id}:</strong> {e.id}</span>{" | "}
-              <span><strong>{labels.patient}:</strong> {e.patientId}</span>{" | "}
-              <span><strong>{labels.date}:</strong> {e.date}</span>{" | "}
-              <span>{labels.notes}: {e.notes}</span>
-        <p>{labels.empty}</p>
-      ) : (
-        <ul>
-          {encounters.map((e) => (
-            <li key={e.id} style={{ margin: "10px 0", padding: "10px", border: "1px solid #ddd" }}>
-              <strong>{labels.id}:</strong> {e.id} | <strong>{labels.patient}:</strong> {e.patientId} |{" "}
-              <strong>{labels.date}:</strong> {e.date} | {labels.notes}: {e.notes}
             </li>
           ))}
         </ul>

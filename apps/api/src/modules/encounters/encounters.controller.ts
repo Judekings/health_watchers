@@ -1,32 +1,126 @@
-import { Request, Response, Router } from 'express';
-import { authenticate } from '../../middlewares/auth.middleware';
+import { Router, Request, Response } from 'express';
 import { EncounterModel } from './encounter.model';
+import { toEncounterResponse } from './encounters.transformer';
+import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
+import { asyncHandler } from '../../utils/asyncHandler';
+import { validateRequest } from '@api/middlewares/validate.middleware';
+import {
+  createEncounterSchema,
+  patchEncounterSchema,
+  encounterIdParamSchema,
+  patientIdParamSchema,
+} from './encounter.validation';
 
 const router = Router();
+router.use(authenticate);
 
-// POST /api/v1/encounters
-router.post('/', authenticate, async (req: Request, res: Response) => {
-  const clinicId = req.user?.clinicId;
-  if (!clinicId) return res.status(401).json({ error: 'Unauthorized' });
+// POST /encounters
+router.post(
+  '/',
+  validateRequest({ body: createEncounterSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const doc = await EncounterModel.create(req.body);
+    return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
+  }),
+);
 
-  const encounter = await EncounterModel.create({ ...req.body, clinicId });
-  return res.status(201).json({ status: 'success', data: encounter });
-});
+// GET /encounters/:id
+router.get(
+  '/:id',
+  validateRequest({ params: encounterIdParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const doc = await EncounterModel.findOne({ 
+      _id: req.params.id, 
+      isActive: true 
+    });
+    if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    return res.json({ status: 'success', data: toEncounterResponse(doc) });
+  }),
+);
 
-// GET /api/v1/encounters/:id
-router.get('/:id', authenticate, async (req: Request, res: Response) => {
-  const encounter = await EncounterModel.findOne({ _id: req.params.id, clinicId: req.user?.clinicId });
-  if (!encounter) return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
-  return res.json({ status: 'success', data: encounter });
-});
+// PATCH /encounters/:id
+// Restricted to DOCTOR and CLINIC_ADMIN roles
+// Only allows updating: chiefComplaint, notes, aiSummary, diagnosis, treatmentPlan
+router.patch(
+  '/:id',
+  requireRoles('DOCTOR', 'CLINIC_ADMIN'),
+  validateRequest({ params: encounterIdParamSchema, body: patchEncounterSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    // Ensure caller can only update encounters in their clinic
+    const encounter = await EncounterModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    
+    if (!encounter) {
+      return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    }
 
-// GET /api/v1/encounters/patient/:patientId
-router.get('/patient/:patientId', authenticate, async (req: Request, res: Response) => {
-  const encounters = await EncounterModel.find({
-    patientId: req.params.patientId,
-    clinicId: req.user?.clinicId,
-  }).sort({ createdAt: -1 });
-  return res.json({ status: 'success', data: encounters });
-});
+    // Update only allowed fields
+    const allowedFields = ['chiefComplaint', 'notes', 'aiSummary', 'diagnosis', 'treatmentPlan'] as const;
+    const updateData: Record<string, any> = {};
+    
+    for (const field of allowedFields) {
+      if (field in req.body && req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
+    }
+
+    const doc = await EncounterModel.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+      runValidators: true,
+    });
+    
+    if (!doc) {
+      return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    }
+    
+    return res.json({ status: 'success', data: toEncounterResponse(doc) });
+  }),
+);
+
+// DELETE /encounters/:id
+// Soft-delete: marks encounter as inactive
+// Restricted to CLINIC_ADMIN role only
+router.delete(
+  '/:id',
+  requireRoles('CLINIC_ADMIN'),
+  validateRequest({ params: encounterIdParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    // Ensure caller can only delete encounters in their clinic
+    const encounter = await EncounterModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+      isActive: true,
+    });
+    
+    if (!encounter) {
+      return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+    }
+
+    // Soft-delete by setting isActive to false
+    const doc = await EncounterModel.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false },
+      { new: true }
+    );
+    
+    return res.json({ status: 'success', message: 'Encounter deleted', data: toEncounterResponse(doc!) });
+  }),
+);
+
+// GET /encounters/patient/:patientId
+router.get(
+  '/patient/:patientId',
+  validateRequest({ params: patientIdParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const docs = await EncounterModel.find({ 
+      patientId: req.params.patientId,
+      isActive: true 
+    }).sort({ createdAt: -1 });
+    return res.json({ status: 'success', data: docs.map(toEncounterResponse) });
+  }),
+);
 
 export const encounterRoutes = router;

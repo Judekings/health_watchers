@@ -1,12 +1,11 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-
-interface Patient {
-  id: string;
-  name: string;
-  dob: string;
-}
+import { useState, useRef } from 'react';
+import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+import { type Patient, formatDate } from '@health-watchers/types';
+import { ErrorMessage, TableSkeleton, ModuleEmptyState } from '@/components/ui';
+import { queryKeys } from '@/lib/queryKeys';
 
 interface Labels {
   title: string;
@@ -15,45 +14,117 @@ interface Labels {
   id: string;
   name: string;
   dob: string;
+  sex: string;
+  contact: string;
+  search: string;
+  view: string;
+  registerNew: string;
 }
 
+import { API_URL } from "@/lib/api";
+
 export default function PatientsClient({ labels }: { labels: Labels }) {
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const debounceTimer = useRef<NodeJS.Timeout>();
 
-  useEffect(() => {
-    fetch("http://localhost:3001/api/v1/patients")
-      .then((res) => res.json())
-      .then((data) => { setPatients(data || []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
+  const {
+    data: patients = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: queryKeys.patients.list(searchQuery || undefined),
+    queryFn: async () => {
+      const url = searchQuery
+        ? `${API_URL}/api/v1/patients/search?q=${encodeURIComponent(searchQuery)}`
+        : `${API_URL}/api/v1/patients`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const data = await res.json();
+      return data.data || [];
+    },
+  });
 
-  if (loading) {
-    return (
-      <p role="status" aria-live="polite" className="px-4 py-8 text-gray-500">
-      <p role="status" aria-live="polite" style={{ padding: "2rem" }}>
-        {labels.loading}
-      </p>
-    );
-  }
+  const [inputValue, setInputValue] = useState('');
+
+  const handleSearch = (value: string) => {
+    setInputValue(value);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => setSearchQuery(value), 300);
+  };
 
   return (
     <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6">{labels.title}</h1>
-      {patients.length === 0 ? (
-        <p role="status" className="text-gray-500">{labels.empty}</p>
+      {/* ── Page header ───────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{labels.title}</h1>
+        <Link
+          href="/patients/new"
+          id="register-new-patient-btn"
+          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+        >
+          <span aria-hidden="true">+</span>
+          {labels.registerNew}
+        </Link>
+      </div>
+
+      {/* ── Search bar ────────────────────────────────────── */}
+      <div className="mb-6">
+        <input
+          id="patient-search"
+          type="search"
+          placeholder={labels.search}
+          value={inputValue}
+          onChange={(e) => handleSearch(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label={labels.search}
+        />
+      </div>
+      {isLoading ? (
+        <TableSkeleton columns={6} rows={5} />
+      ) : error ? (
+        <ErrorMessage
+          message={error instanceof Error ? error.message : 'Failed to load patients.'}
+          onRetry={() => window.location.reload()}
+        />
+      ) : patients.length === 0 ? (
+        <ModuleEmptyState
+          module="patients"
+          action={
+            <Link
+              href="/patients/new"
+              id="register-new-patient-empty-btn"
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              <span aria-hidden="true">+</span>
+              {labels.registerNew}
+            </Link>
+          }
+        />
       ) : (
         <>
-          {/* Card layout on mobile, table on md+ */}
           <div className="md:hidden flex flex-col gap-4">
-            {patients.map((p) => (
-              <div key={p.id} className="rounded border border-gray-200 p-4 shadow-sm">
+            {patients.map((p: Patient) => (
+              <div key={p._id} className="rounded border border-gray-200 p-4 shadow-sm">
                 <p className="text-xs text-gray-500 uppercase tracking-wide">{labels.id}</p>
-                <p className="font-medium text-gray-900">{p.id}</p>
+                <p className="font-medium text-gray-900">{p.systemId}</p>
                 <p className="mt-2 text-xs text-gray-500 uppercase tracking-wide">{labels.name}</p>
-                <p className="font-medium text-gray-900">{p.name}</p>
+                <p className="font-medium text-gray-900">
+                  {p.firstName} {p.lastName}
+                </p>
                 <p className="mt-2 text-xs text-gray-500 uppercase tracking-wide">{labels.dob}</p>
-                <p className="text-gray-700">{p.dob}</p>
+                <p className="text-gray-700">{formatDate(p.dateOfBirth)}</p>
+                <p className="mt-2 text-xs text-gray-500 uppercase tracking-wide">{labels.sex}</p>
+                <p className="text-gray-700">{p.sex}</p>
+                <p className="mt-2 text-xs text-gray-500 uppercase tracking-wide">
+                  {labels.contact}
+                </p>
+                <p className="text-gray-700">{p.contactNumber || 'N/A'}</p>
+                <Link
+                  href={`/patients/${p._id}`}
+                  className="mt-3 inline-block px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                >
+                  {labels.view}
+                </Link>
               </div>
             ))}
           </div>
@@ -62,60 +133,49 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
             <table aria-label={labels.title} className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-50">
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.id}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.name}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.dob}</th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.id}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.name}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.dob}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.sex}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.contact}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.view}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {patients.map((p) => (
-                  <tr key={p.id} className="even:bg-gray-50">
-                    <td className="border border-gray-200 px-4 py-2">{p.id}</td>
-                    <td className="border border-gray-200 px-4 py-2">{p.name}</td>
-                    <td className="border border-gray-200 px-4 py-2">{p.dob}</td>
+                {patients.map((p: Patient) => (
+                  <tr key={p._id} className="even:bg-gray-50">
+                    <td className="border border-gray-200 px-4 py-2">{p.systemId}</td>
+                    <td className="border border-gray-200 px-4 py-2">
+                      {p.firstName} {p.lastName}
+                    </td>
+                    <td className="border border-gray-200 px-4 py-2">
+                      {formatDate(p.dateOfBirth)}
+                    </td>
+                    <td className="border border-gray-200 px-4 py-2">{p.sex}</td>
+                    <td className="border border-gray-200 px-4 py-2">{p.contactNumber || 'N/A'}</td>
+                    <td className="border border-gray-200 px-4 py-2">
+                      <Link href={`/patients/${p._id}`} className="text-blue-600 hover:underline">
+                        {labels.view}
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </>
-  if (loading) return <p style={{ padding: "2rem" }}>{labels.loading}</p>;
-
-  return (
-    <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1>{labels.title}</h1>
-      {patients.length === 0 ? (
-        <p role="status">{labels.empty}</p>
-      ) : (
-        <table
-          aria-label={labels.title}
-          style={{ width: "100%", borderCollapse: "collapse" }}
-        >
-          <thead>
-            <tr>
-              <th scope="col" style={{ border: "1px solid #ddd", padding: "8px" }}>{labels.id}</th>
-              <th scope="col" style={{ border: "1px solid #ddd", padding: "8px" }}>{labels.name}</th>
-              <th scope="col" style={{ border: "1px solid #ddd", padding: "8px" }}>{labels.dob}</th>
-        <p>{labels.empty}</p>
-      ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              {[labels.id, labels.name, labels.dob].map((h) => (
-                <th key={h} style={{ border: "1px solid #ddd", padding: "8px" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {patients.map((p) => (
-              <tr key={p.id}>
-                <td style={{ border: "1px solid #ddd", padding: "8px" }}>{p.id}</td>
-                <td style={{ border: "1px solid #ddd", padding: "8px" }}>{p.name}</td>
-                <td style={{ border: "1px solid #ddd", padding: "8px" }}>{p.dob}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       )}
     </main>
   );

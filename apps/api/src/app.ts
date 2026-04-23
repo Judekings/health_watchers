@@ -1,24 +1,148 @@
-import express from "express";
-import { config } from "@health-watchers/config";
-import authRoutes from "./modules/auth/auth.routes";
-import patientRoutes from "./modules/patients/patients.routes";
-import encounterRoutes from "./modules/encounters/encounters.routes";
-import paymentRoutes from "./modules/payments/payments.routes";
-import aiRoutes from "./modules/ai/ai.routes";
+import './config/env'; // must be first — validates env vars
+
+
+import crypto from 'crypto';
+import express from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import compression from 'compression';
+import pinoHttp from 'pino-http';
+import mongoSanitize from 'express-mongo-sanitize';
+import { connectDB } from './config/db';
+import { authRoutes } from './modules/auth/auth.controller';
+import { userRoutes } from './modules/users/users.controller';
+import { patientRoutes } from './modules/patients/patients.controller';
+import { encounterRoutes } from './modules/encounters/encounters.controller';
+import { paymentRoutes } from './modules/payments/payments.controller';
+import { clinicRoutes } from './modules/clinics/clinics.controller';
+import { webhookRoutes } from './modules/webhooks/webhooks.controller';
+import { auditLogRoutes } from './modules/audit/audit-logs.controller';
+import aiRoutes from './modules/ai/ai.routes';
+import { setupSwagger } from './docs/swagger';
+import dashboardRoutes from './modules/dashboard/dashboard.routes';
+import { errorHandler } from './middlewares/error.middleware';
+import { authLimiter, forgotPasswordLimiter, aiLimiter, paymentLimiter, generalLimiter } from './middlewares/rate-limit.middleware';
+import { appointmentRoutes } from './modules/appointments/appointments.controller';
+import {
+  startPaymentExpirationJob,
+  stopPaymentExpirationJob,
+} from './modules/payments/services/payment-expiration-job';
+import logger from './utils/logger';
 
 const app = express();
-app.use(express.json());
+const PORT = process.env.PORT || 4000;
 
-app.get("/health", (_req, res) => res.json({ status: "ok", service: "health-watchers-api" }));
+// Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 50kb)
+const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? '50kb';
+// AI routes allow larger payloads for summarization (default 500kb)
+const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '500kb';
 
-app.use("/api/v1/auth", authRoutes);
-app.use("/api/v1/patients", patientRoutes);
-app.use("/api/v1/encounters", encounterRoutes);
-app.use("/api/v1/payments", paymentRoutes);
-app.use("/api/v1/ai", aiRoutes);
+// ── Security & performance ────────────────────────────────────────────────────
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  }),
+);
+app.use(compression());
 
-app.listen(config.apiPort, () => {
-  console.log(`Health Watchers API running on port ${config.apiPort}`);
-});
+// ── CORS ──────────────────────────────────────────────────────────────────────
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow server-to-server requests (no origin) and listed origins
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error(`CORS: origin '${origin}' not allowed`));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }),
+);
+app.options('*', cors());
+
+// ── HTTP request logging with correlation ID ──────────────────────────────────
+const isProd = process.env.NODE_ENV === 'production';
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req) =>
+      (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
+    autoLogging: { ignore: (req) => isProd && req.url === '/health' },
+    redact: ['req.headers.authorization'],
+  }),
+);
+
+// ── Body parsing & sanitization ───────────────────────────────────────────────
+app.use(express.json({ limit: standardLimit }));
+app.use(mongoSanitize({ replaceWith: '_' }));
+
+// ── Health check ──────────────────────────────────────────────────────────────
+app.get('/health', (_req, res) =>
+  res.json({ status: 'ok', service: 'health-watchers-api', timestamp: new Date().toISOString() }),
+);
+
+// ── Routes ────────────────────────────────────────────────────────────────────
+app.use('/api/v1', generalLimiter);
+app.use('/api/v1/auth/forgot-password', forgotPasswordLimiter);
+app.use('/api/v1/auth', authLimiter, authRoutes);
+app.use('/api/v1/clinics', clinicRoutes);
+app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/patients', patientRoutes);
+app.use('/api/v1/encounters', encounterRoutes);
+app.use('/api/v1/payments', paymentLimiter, paymentRoutes);
+app.use('/api/v1/webhooks', webhookRoutes);
+app.use('/api/v1/audit-logs', auditLogRoutes);
+app.use('/api/v1/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
+app.use('/api/v1/dashboard', dashboardRoutes);
+app.use('/api/v1/appointments', appointmentRoutes);
+
+setupSwagger(app);
+
+// ── 404 & global error handler ────────────────────────────────────────────────
+app.use('*', (_req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
+app.use(errorHandler);
 
 export default app;
+
+// ── Start server ──────────────────────────────────────────────────────────────
+async function startServer() {
+  await connectDB();
+
+  const server = app.listen(PORT, () => {
+    logger.info(`🚀 Server running on http://localhost:${PORT}`);
+  });
+
+  startPaymentExpirationJob();
+
+  const shutdown = async () => {
+    stopPaymentExpirationJob();
+    server.close(() => process.exit(0));
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+}
+
+process.on('unhandledRejection', (err: unknown) => {
+  logger.error({ err }, 'Unhandled rejection');
+  process.exit(1);
+});
+
+startServer();
