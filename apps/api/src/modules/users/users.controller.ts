@@ -71,6 +71,14 @@ router.get("/me", authenticate, async (req: Request, res: Response) => {
         language: user.preferences?.language ?? "en",
         emailNotifications: user.preferences?.emailNotifications ?? true,
         inAppNotifications: user.preferences?.inAppNotifications ?? true,
+        notificationTypes: {
+          referral_received:    user.preferences?.notificationTypes?.referral_received    ?? true,
+          payment_confirmed:    user.preferences?.notificationTypes?.payment_confirmed    ?? true,
+          appointment_reminder: user.preferences?.notificationTypes?.appointment_reminder ?? true,
+          ai_summary_ready:     user.preferences?.notificationTypes?.ai_summary_ready     ?? true,
+          lab_result_ready:     user.preferences?.notificationTypes?.lab_result_ready     ?? true,
+          system:               user.preferences?.notificationTypes?.system               ?? true,
+        },
       },
     },
   });
@@ -332,10 +340,20 @@ router.post(
   },
 );
 
+const notificationTypesSchema = z.object({
+  referral_received:    z.boolean().optional(),
+  payment_confirmed:    z.boolean().optional(),
+  appointment_reminder: z.boolean().optional(),
+  ai_summary_ready:     z.boolean().optional(),
+  lab_result_ready:     z.boolean().optional(),
+  system:               z.boolean().optional(),
+}).optional();
+
 const updatePreferencesSchema = z.object({
   language: z.enum(["en", "fr"]).optional(),
   emailNotifications: z.boolean().optional(),
   inAppNotifications: z.boolean().optional(),
+  notificationTypes: notificationTypesSchema,
 });
 
 /**
@@ -376,13 +394,16 @@ router.patch(
         .json({ error: "Unauthorized", message: "User not found" });
     }
 
-    const { language, emailNotifications, inAppNotifications } = req.body;
+    const { language, emailNotifications, inAppNotifications, notificationTypes } = req.body;
 
     if (language !== undefined) user.preferences.language = language;
     if (emailNotifications !== undefined)
       user.preferences.emailNotifications = emailNotifications;
     if (inAppNotifications !== undefined)
       user.preferences.inAppNotifications = inAppNotifications;
+    if (notificationTypes !== undefined) {
+      Object.assign(user.preferences.notificationTypes, notificationTypes);
+    }
 
     await user.save();
 
@@ -393,6 +414,7 @@ router.patch(
           language: user.preferences.language,
           emailNotifications: user.preferences.emailNotifications,
           inAppNotifications: user.preferences.inAppNotifications,
+          notificationTypes: user.preferences.notificationTypes,
         },
       },
     });

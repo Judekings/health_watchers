@@ -25,6 +25,7 @@ import { authLimiter, forgotPasswordLimiter, aiLimiter, paymentLimiter, generalL
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
+import { notificationRoutes } from './modules/notifications/notifications.controller';
 import {
   startPaymentExpirationJob,
   stopPaymentExpirationJob,
@@ -128,6 +129,7 @@ app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
 app.use('/api/v1/icd10', icd10Routes);
 app.use('/api/v1/settings', clinicSettingsRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 
 setupSwagger(app);
 
