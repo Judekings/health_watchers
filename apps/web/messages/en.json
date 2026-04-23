@@ -2,7 +2,8 @@
   "nav": {
     "patients": "Patients",
     "encounters": "Encounters",
-    "payments": "Payments"
+    "payments": "Payments",
+    "wallet": "Wallet"
   },
   "login": {
     "title": "Sign in to Health Watchers",

@@ -2,7 +2,8 @@
   "nav": {
     "patients": "Patients",
     "encounters": "Consultations",
-    "payments": "Paiements"
+    "payments": "Paiements",
+    "wallet": "Portefeuille"
   },
   "login": {
     "title": "Connectez-vous à Health Watchers",
