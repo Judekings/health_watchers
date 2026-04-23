@@ -68,6 +68,7 @@ async function resetPasswordHandler(
   const user = await (UserModel as any).findOne({
     resetPasswordTokenHash: tokenHash,
     resetPasswordExpiresAt: { $gt: new Date() },
+    resetPasswordExpiresAt: { $gt: expect.any(Date) },
   });
 
   if (!user) {
@@ -120,6 +121,7 @@ describe('POST /auth/forgot-password', () => {
 
     await forgotPasswordHandler({ email: 'x@x.com' }, res);
 
+    // The hash stored must differ from the raw token sent in the email
     const rawTokenSentInEmail = (sendPasswordResetEmail as jest.Mock).mock.calls[0][1] as string;
     expect(user.resetPasswordTokenHash).not.toBe(rawTokenSentInEmail);
     expect(user.resetPasswordTokenHash).toBe(hashToken(rawTokenSentInEmail));

@@ -28,8 +28,11 @@ import {
   signTempToken,
   verifyRefreshToken,
   verifyTempToken,
+  REFRESH_TOKEN_EXPIRY_MS,
 } from './token.service';
+import { RefreshTokenModel } from './models/refresh-token.model';
 import { totpService } from './totp.service';
+import { sendVerificationEmail } from '@api/lib/email.service';
 
 const router = Router();
 const INVALID = 'Invalid email or password';
@@ -93,7 +96,13 @@ router.post(
       clinicId: req.body.clinicId,
     });
 
-    const { password: _pw, ...sanitized } = user.toObject();
+    // Generate email verification token
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    user.emailVerificationTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    await user.save();
+    await sendVerificationEmail(user.email, rawToken);
+
+    const { password: _pw, emailVerificationTokenHash: _evth, ...sanitized } = user.toObject();
     return res.status(201).json({ status: 'success', data: sanitized });
   },
 );
@@ -147,9 +156,17 @@ router.post(
     }
 
     const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const { token: refreshToken, jti, family } = signRefreshToken(p);
+    await RefreshTokenModel.create({
+      jti,
+      userId: user.id,
+      family,
+      consumed: false,
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
+    });
     return res.json({
       status: 'success',
-      data: { accessToken: signAccessToken(p), refreshToken: signRefreshToken(p) },
+      data: { accessToken: signAccessToken(p), refreshToken },
     });
   },
 );
@@ -169,19 +186,37 @@ router.post(
     if (!decoded)
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
 
+    const existing = await RefreshTokenModel.findOne({ jti: decoded.jti });
+    if (!existing)
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
+
+    // Replay attack: token already consumed — revoke entire family
+    if (existing.consumed) {
+      await RefreshTokenModel.deleteMany({ family: existing.family });
+      return res.status(401).json({ error: 'Unauthorized', message: 'Token reuse detected — all sessions revoked' });
+    }
+
     const user = await UserModel.findById(decoded.userId);
     if (!user || !user.isActive)
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid refresh token' });
 
+    // Mark old token consumed and issue new one (rotation)
+    existing.consumed = true;
+    await existing.save();
+
+    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const { token: refreshToken, jti, family } = signRefreshToken(p, decoded.family);
+    await RefreshTokenModel.create({
+      jti,
+      userId: user.id,
+      family,
+      consumed: false,
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
+    });
+
     return res.json({
       status: 'success',
-      data: {
-        accessToken: signAccessToken({
-          userId: user.id,
-          role: user.role,
-          clinicId: String(user.clinicId),
-        }),
-      },
+      data: { accessToken: signAccessToken(p), refreshToken },
     });
   },
 );
@@ -192,11 +227,30 @@ router.post(
  *   post:
  *     summary: Invalidate the current refresh token
  *     tags: [Auth]
+ */
+router.post(
+  '/logout',
+  validateRequest({ body: refreshSchema }),
+  async (req: RefreshReq, res: Response) => {
+    const decoded = verifyRefreshToken(req.body.refreshToken);
+    if (decoded) {
+      await RefreshTokenModel.deleteOne({ jti: decoded.jti });
+    }
+    return res.json({ status: 'success', data: { loggedOut: true } });
+  },
+);
+
+/**
+ * @swagger
+ * /auth/logout-all:
+ *   post:
+ *     summary: Revoke all refresh tokens for the authenticated user
+ *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
  */
-router.post('/logout', authenticate, async (req: Request, res: Response) => {
-  await UserModel.findByIdAndUpdate(req.user!.userId, { refreshTokenHash: undefined });
+router.post('/logout-all', authenticate, async (req: Request, res: Response) => {
+  await RefreshTokenModel.deleteMany({ userId: req.user!.userId });
   return res.json({ status: 'success', data: { loggedOut: true } });
 });
 
@@ -273,9 +327,17 @@ router.post(
     if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
 
     const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const { token: refreshToken, jti, family } = signRefreshToken(p);
+    await RefreshTokenModel.create({
+      jti,
+      userId: user.id,
+      family,
+      consumed: false,
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
+    });
     return res.json({
       status: 'success',
-      data: { accessToken: signAccessToken(p), refreshToken: signRefreshToken(p) },
+      data: { accessToken: signAccessToken(p), refreshToken },
     });
   },
 );
@@ -307,6 +369,30 @@ router.post('/unlock', authenticate, async (req: Request, res: Response) => {
   return res.json({ status: 'success', data: { unlocked: true, email: user.email } });
 });
 
+/**
+ * @swagger
+ * /auth/verify-email:
+ *   get:
+ *     summary: Verify email address using the token sent during registration
+ *     tags: [Auth]
+ */
+router.get('/verify-email', async (req: Request, res: Response) => {
+  const token = String(req.query.token ?? '').trim();
+  if (!token) return res.status(400).json({ error: 'BadRequest', message: 'token is required' });
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const user = await UserModel.findOne({ emailVerificationTokenHash: tokenHash }).select(
+    '+emailVerificationTokenHash',
+  );
+
+  if (!user) return res.status(400).json({ error: 'BadRequest', message: 'Invalid or expired verification token' });
+
+  user.emailVerified = true;
+  user.emailVerificationTokenHash = undefined;
+  await user.save();
+
+  return res.json({ status: 'success', data: { emailVerified: true } });
+});
 const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 
 /**
