@@ -27,6 +27,7 @@ import { labResultRoutes } from './modules/lab-results/lab-results.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
 import { apiVersionHeader } from './middlewares/versioning.middleware';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
+import { notificationRoutes } from './modules/notifications/notifications.controller';
 import {
   startPaymentExpirationJob,
   stopPaymentExpirationJob,
@@ -149,6 +150,7 @@ app.use('/api/v1/appointments', appointmentRoutes);
 app.use('/api/v1/icd10', icd10Routes);
 app.use('/api/v1/lab-results', labResultRoutes);
 app.use('/api/v1/settings', clinicSettingsRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 
 setupSwagger(app);
 
