@@ -9,10 +9,41 @@ import {
   patchEncounterSchema,
   encounterIdParamSchema,
   patientIdParamSchema,
+  listEncountersQuerySchema,
+  ListEncountersQuery,
 } from './encounter.validation';
 
 const router = Router();
 router.use(authenticate);
+
+// GET /encounters
+router.get(
+  '/',
+  validateRequest({ query: listEncountersQuerySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { page, limit, patientId, status } = req.query as unknown as ListEncountersQuery;
+    const filter: Record<string, unknown> = { clinicId: req.user!.clinicId, isActive: true };
+    if (patientId) filter.patientId = patientId;
+    if (status) filter.status = status;
+
+    const skip = (page - 1) * limit;
+    const [docs, total] = await Promise.all([
+      EncounterModel.find(filter)
+        .populate('patientId', 'firstName lastName systemId')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      EncounterModel.countDocuments(filter),
+    ]);
+
+    return res.json({
+      status: 'success',
+      data: docs.map(toEncounterResponse),
+      meta: { total, page, limit },
+    });
+  }),
+);
 
 // POST /encounters
 router.post(

@@ -30,6 +30,7 @@ export default function EncountersPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     fetchEncounters();
@@ -47,6 +48,7 @@ export default function EncountersPage() {
       
       if (data.status === 'success') {
         setEncounters(data.data);
+        setTotal(data.meta.total);
       }
     } catch (error) {
       console.error('Failed to fetch encounters:', error);
@@ -54,6 +56,8 @@ export default function EncountersPage() {
       setLoading(false);
     }
   };
+
+  const totalPages = Math.ceil(total / limit);
 
   if (loading) return <div>Loading encounters...</div>;
 
@@ -88,12 +92,11 @@ export default function EncountersPage() {
         >
           Previous
         </button>
-        <span>
-          Page {page} of {Math.ceil(100 / limit)} {/* Replace 100 with meta.total */}
-        </span>
+        <span>Page {page} of {totalPages || 1}</span>
         <button
           onClick={() => setPage(p => p + 1)}
-          className="px-4 py-2 bg-blue-500 text-white rounded"
+          disabled={page >= totalPages}
+          className="px-4 py-2 bg-blue-500 text-white rounded disabled:opacity-50"
         >
           Next
         </button>
