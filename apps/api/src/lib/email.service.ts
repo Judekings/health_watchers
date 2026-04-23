@@ -46,3 +46,4 @@ export async function sendVerificationEmail(to: string, verificationToken: strin
     logger.error({ err, to }, 'Failed to send verification email');
   }
 }
+}
