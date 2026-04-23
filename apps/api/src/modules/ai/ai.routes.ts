@@ -100,4 +100,64 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/v1/ai/health-trends
+// Request body: { patientId: string }
+// Returns: { success: boolean, summary: string }
+router.post('/health-trends', authenticate, async (req: Request, res: Response) => {
+  try {
+    if (!isAIServiceAvailable()) {
+      return res.status(503).json({ error: 'AIUnavailable' });
+    }
+
+    const { patientId } = req.body;
+    if (!patientId || !isValidObjectId(patientId)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Valid patientId is required' });
+    }
+
+    const { EncounterModel } = await import('../encounters/encounter.model');
+    const { PatientModel } = await import('../patients/models/patient.model');
+
+    const [patient, encounters] = await Promise.all([
+      PatientModel.findOne({ _id: patientId, clinicId: req.user!.clinicId }).lean(),
+      EncounterModel.find({ patientId, clinicId: req.user!.clinicId, isActive: true })
+        .sort({ createdAt: 1 })
+        .select('vitalSigns createdAt')
+        .lean(),
+    ]);
+
+    if (!patient) {
+      return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    }
+
+    // Anonymize: strip PII, keep only vitals + dates
+    const anonymizedVitals = encounters
+      .filter((e) => e.vitalSigns && Object.keys(e.vitalSigns).length > 0)
+      .map((e) => ({ date: (e as any).createdAt, vitals: e.vitalSigns }));
+
+    if (anonymizedVitals.length === 0) {
+      return res.status(422).json({ error: 'InsufficientData', message: 'No vital sign data available for trend analysis' });
+    }
+
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const { config } = await import('@health-watchers/config');
+    const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    const prompt = `You are a medical AI assistant. Analyze the following anonymized vital sign history and provide a concise health trend summary in 2-3 sentences. Focus on notable patterns, improvements, or concerns.
+
+Vital Signs History (chronological):
+${JSON.stringify(anonymizedVitals, null, 2)}
+
+Provide a professional health trend summary:`;
+
+    const result = await model.generateContent(prompt);
+    const summary = result.response.text();
+
+    return res.json({ success: true, summary, readings: anonymizedVitals.length });
+  } catch (error: any) {
+    logger.error({ err: error }, 'AI health-trends error');
+    return res.status(500).json({ error: 'InternalServerError', message: error.message });
+  }
+});
+
 export default router;
