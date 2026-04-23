@@ -15,6 +15,7 @@ import { toPaymentResponse } from './payments.transformer';
 import { stellarClient } from './services/stellar-client';
 import logger from '@api/utils/logger';
 import { randomUUID } from 'crypto';
+import { sendPaymentConfirmationEmail } from '@api/lib/email.service';
 
 const router = Router();
 router.use(authenticate);
@@ -240,6 +241,16 @@ router.patch(
     );
 
     logger.info({ intentId, txHash }, 'Payment confirmed');
+
+    // Send confirmation email to clinic (non-blocking)
+    try {
+      const { ClinicModel } = await import('../clinics/clinic.model');
+      const clinic = await ClinicModel.findById(updatedPayment!.clinicId).lean();
+      if (clinic?.email) {
+        sendPaymentConfirmationEmail(clinic.email, updatedPayment!.amount, updatedPayment!.assetCode, txHash);
+      }
+    } catch { /* non-critical */ }
+
     return res.json({ status: 'success', data: toPaymentResponse(updatedPayment!) });
   }),
 );

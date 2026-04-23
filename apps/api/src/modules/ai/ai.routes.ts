@@ -3,6 +3,7 @@ import { isValidObjectId } from 'mongoose';
 import { generateClinicalSummary, isAIServiceAvailable } from './ai.service';
 import { authenticate } from '../../middlewares/auth.middleware';
 import logger from '../../utils/logger';
+import { sendAiSummaryReadyEmail } from '@api/lib/email.service';
 
 const router = Router();
 
@@ -61,6 +62,20 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
     // Store the summary in the encounter
     encounter.aiSummary = summary;
     await encounter.save();
+
+    // Notify attending doctor (non-blocking)
+    try {
+      const { UserModel } = await import('../auth/models/user.model');
+      const { PatientModel } = await import('../patients/models/patient.model');
+      const [doctor, patient] = await Promise.all([
+        UserModel.findById(encounter.attendingDoctorId).lean(),
+        PatientModel.findById(encounter.patientId).lean(),
+      ]);
+      if (doctor?.email && patient) {
+        const patientName = `${(patient as any).firstName} ${(patient as any).lastName}`;
+        sendAiSummaryReadyEmail(doctor.email, patientName, encounterId);
+      }
+    } catch { /* non-critical */ }
 
     return res.json({
       success: true,
