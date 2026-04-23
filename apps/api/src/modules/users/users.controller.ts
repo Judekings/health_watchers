@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { authenticate } from "@api/middlewares/auth.middleware";
 import { validateRequest } from "@api/middlewares/validate.middleware";
 import { UserModel } from "../auth/models/user.model";
+import { ClinicModel } from "../clinics/clinic.model";
 import { totpService } from "../auth/totp.service";
 
 const updateProfileSchema = z.object({
@@ -54,13 +55,17 @@ router.get("/me", authenticate, async (req: Request, res: Response) => {
       .json({ error: "Unauthorized", message: "User not found" });
   }
 
+  const clinic = await ClinicModel.findById(user.clinicId).lean<{ name: string } | null>();
+
   return res.json({
     status: "success",
     data: {
+      userId: String(user._id),
       fullName: user.fullName,
       email: user.email,
       role: user.role,
       clinic: String(user.clinicId),
+      clinicName: clinic?.name ?? null,
       mfaEnabled: user.mfaEnabled,
       preferences: {
         language: user.preferences?.language ?? "en",
