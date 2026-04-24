@@ -49,6 +49,10 @@ import {
   startReconciliationJob,
   stopReconciliationJob,
 } from './modules/payments/services/reconciliation-job';
+import {
+  startBalanceMonitoringJob,
+  stopBalanceMonitoringJob,
+} from './modules/payments/services/balance-monitoring-job';
 import { getCacheMetrics } from './services/cache.service';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
@@ -220,6 +224,7 @@ async function startServer() {
 
   startPaymentExpirationJob();
   startReconciliationJob();
+  startBalanceMonitoringJob();
 
   // Graceful shutdown handler
   const shutdown = async (signal: string) => {
@@ -233,6 +238,7 @@ async function startServer() {
         // Stop payment expiration job
         stopPaymentExpirationJob();
         stopReconciliationJob();
+        stopBalanceMonitoringJob();
         logger.info('Payment expiration job stopped');
 
         // Close database connection

@@ -7,6 +7,10 @@ export const NOTIFICATION_TYPES = [
   'ai_summary_ready',
   'lab_result_ready',
   'system',
+  'balance_low_warning',
+  'balance_critical',
+  'large_transaction',
+  'unrecognized_transaction',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
