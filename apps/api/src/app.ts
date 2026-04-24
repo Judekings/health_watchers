@@ -1,6 +1,5 @@
 import './config/env'; // must be first — validates env vars
 
-
 import crypto from 'crypto';
 import express from 'express';
 import helmet from 'helmet';
@@ -22,7 +21,13 @@ import aiRoutes from './modules/ai/ai.routes';
 import { setupSwagger } from './docs/swagger';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
-import { authLimiter, forgotPasswordLimiter, aiLimiter, paymentLimiter, generalLimiter } from './middlewares/rate-limit.middleware';
+import {
+  authLimiter,
+  forgotPasswordLimiter,
+  aiLimiter,
+  paymentLimiter,
+  generalLimiter,
+} from './middlewares/rate-limit.middleware';
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
 import { labResultRoutes } from './modules/lab-results/lab-results.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
@@ -35,6 +40,9 @@ import {
   startPaymentExpirationJob,
   stopPaymentExpirationJob,
 } from './modules/payments/services/payment-expiration-job';
+import { getCacheMetrics } from './services/cache.service';
+import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
+import { portalRoutes } from './modules/portal/portal.controller';
 import logger from './utils/logger';
 
 const app = express();
@@ -61,7 +69,7 @@ app.use(
       },
     },
     hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
-  }),
+  })
 );
 app.use(
   compression({
@@ -96,7 +104,7 @@ app.use(
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-  }),
+  })
 );
 app.options('*', cors());
 
@@ -105,11 +113,10 @@ const isProd = process.env.NODE_ENV === 'production';
 app.use(
   pinoHttp({
     logger,
-    genReqId: (req) =>
-      (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
+    genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
     autoLogging: { ignore: (req) => isProd && req.url === '/health' },
     redact: ['req.headers.authorization'],
-  }),
+  })
 );
 
 // ── Body parsing & sanitization ───────────────────────────────────────────────
@@ -122,7 +129,9 @@ app.use(mongoSanitize({ replaceWith: '_' }));
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
     if (!req.is('application/json') && !req.is('application/x-www-form-urlencoded')) {
-      return res.status(415).json({ error: 'UnsupportedMediaType', message: 'Content-Type must be application/json' });
+      return res
+        .status(415)
+        .json({ error: 'UnsupportedMediaType', message: 'Content-Type must be application/json' });
     }
   }
   next();
@@ -130,7 +139,12 @@ app.use((req, res, next) => {
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) =>
-  res.json({ status: 'ok', service: 'health-watchers-api', timestamp: new Date().toISOString() }),
+  res.json({
+    status: 'ok',
+    service: 'health-watchers-api',
+    timestamp: new Date().toISOString(),
+    cache: getCacheMetrics(),
+  })
 );
 
 // ── API version header on all /api/* responses ────────────────────────────────
@@ -171,6 +185,8 @@ app.use('/api/v1/settings', clinicSettingsRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/referrals', referralRoutes);
 app.use('/api/v1/invoices', invoiceRoutes);
+app.use('/api/v1/care-plans', carePlanRoutes);
+app.use('/api/v1/portal', portalRoutes);
 
 setupSwagger(app);
 
