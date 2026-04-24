@@ -1,6 +1,7 @@
 'use client';
 
 import { useAuth } from '@/context/AuthContext';
+import NotificationBell from '@/components/notifications/NotificationBell';
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -33,8 +34,9 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         {user?.clinicName ?? 'Health Watchers'}
       </span>
 
-      {/* Right: avatar + logout */}
+      {/* Right: notification bell + avatar + logout */}
       <div className="flex items-center gap-3">
+        <NotificationBell />
         <div
           className="w-8 h-8 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center select-none"
           aria-label={user ? `Logged in as ${user.name}` : 'Not logged in'}

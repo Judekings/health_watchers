@@ -4,11 +4,20 @@ import crypto from 'crypto';
 import express from 'express';
 import { Server } from 'http';
 import pinoHttp from 'pino-http';
-import { fundAccount, createIntent, verifyIntent, getAccountBalance } from './stellar.js';
+<<<<<<< fix/stellar-network-safety-guards-335
+import { fundAccount, createIntent, verifyIntent } from './stellar.js';
+=======
+import { fundAccount, createIntent, verifyIntent, getAccountBalance, createUsdcTrustline } from './stellar.js';
+>>>>>>> main
 import dotenv from 'dotenv';
 import logger from './logger.js';
+import { stellarConfig } from './config.js';
+import { assertMainnetSafety } from './guards.js';
 
 dotenv.config();
+
+// Run startup validation
+assertMainnetSafety();
 
 const app = express();
 const PORT = process.env.STELLAR_PORT || 3002;
@@ -43,13 +52,32 @@ app.use(pinoHttp({
   redact: ['req.headers.authorization'],
 }));
 
-// ✅ PROTECTED: POST /fund (requires secret)
+// ✅ PUBLIC: GET /network - Network status endpoint
+app.get('/network', (req, res) => {
+  res.json({
+    network: stellarConfig.network,
+    horizonUrl: stellarConfig.horizonUrl,
+    platformPublicKey: stellarConfig.platformPublicKey,
+    mainnetMode: stellarConfig.network === 'mainnet',
+    dryRun: stellarConfig.dryRun,
+  });
+});
+
+// ✅ PROTECTED: POST /fund (requires secret, testnet only)
 app.post('/fund', requireSecret, async (req, res) => {
+  // Return 403 on mainnet - Friendbot is testnet-only
+  if (stellarConfig.network === 'mainnet') {
+    return res.status(403).json({ 
+      error: 'Forbidden', 
+      message: 'Friendbot funding is not available on mainnet' 
+    });
+  }
+
   try {
     const { publicKey, amount } = req.body;
     const result = await fundAccount(publicKey, amount);
     res.json({ success: true, ...result });
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -60,7 +88,7 @@ app.post('/intent', requireSecret, async (req, res) => {
     const { fromPublicKey, toPublicKey, amount } = req.body;
     const result = await createIntent(fromPublicKey, toPublicKey, amount);
     res.json({ success: true, ...result });
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -71,7 +99,7 @@ app.get('/verify/:hash', async (req, res) => {
     const { hash } = req.params;
     const result = await verifyIntent(hash);
     res.json({ success: true, ...result });
-  } catch (error) {
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -87,8 +115,61 @@ app.get('/balance/:publicKey', requireSecret, async (req, res) => {
   }
 });
 
+// ✅ PROTECTED: POST /trustline/usdc (requires secret)
+app.post('/trustline/usdc', requireSecret, async (req, res) => {
+  try {
+    const { publicKey, usdcIssuer } = req.body;
+    if (!publicKey || !usdcIssuer) {
+      return res.status(400).json({ error: 'publicKey and usdcIssuer are required' });
+    }
+    const result = await createUsdcTrustline(publicKey, usdcIssuer);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const server: Server = app.listen(PORT, () => {
-  logger.info({ port: PORT, secret: SHARED_SECRET ? 'SET' : 'MISSING' }, 'Stellar Service running');
+  logger.info({ 
+    port: PORT, 
+    network: stellarConfig.network,
+    mainnetMode: stellarConfig.network === 'mainnet',
+    secret: SHARED_SECRET ? 'SET' : 'MISSING' 
+  }, 'Stellar Service running');
+});
+
+// Graceful shutdown handler
+const shutdown = async (signal: string) => {
+  logger.info(`${signal} received, starting graceful shutdown`);
+
+  // Stop accepting new connections
+  server.close(() => {
+    logger.info('HTTP server closed');
+    logger.info('Graceful shutdown completed');
+    process.exit(0);
+  });
+
+  // Force exit after 30 seconds if graceful shutdown hangs
+  setTimeout(() => {
+    logger.error('Graceful shutdown timeout (30s), forcing exit');
+    process.exit(1);
+  }, 30000);
+};
+
+// Handle termination signals
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err: unknown) => {
+  logger.error({ err }, 'Uncaught exception');
+  shutdown('uncaughtException');
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason: unknown) => {
+  logger.error({ reason }, 'Unhandled rejection');
+  // Log but don't exit - let the process continue
 });
 
 export default server;
