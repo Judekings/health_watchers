@@ -1,6 +1,6 @@
-import StellarSdk from 'stellar-sdk';
-import { stellarConfig } from './config';
-import logger from './logger';
+import { Horizon } from '@stellar/stellar-sdk';
+import { stellarConfig } from './config.js';
+import logger from './logger.js';
 
 export type PaymentStreamHandler = (payment: {
   memo: string;
@@ -20,11 +20,7 @@ export function startPaymentStream(onPayment: PaymentStreamHandler): () => void 
     return () => {};
   }
 
-  const server = new StellarSdk.Horizon.Server(
-    stellarConfig.network === 'mainnet'
-      ? 'https://horizon.stellar.org'
-      : 'https://horizon-testnet.stellar.org'
-  );
+  const server = new Horizon.Server(stellarConfig.horizonUrl);
 
   logger.info(
     { publicKey: stellarConfig.platformPublicKey, network: stellarConfig.network },
@@ -52,7 +48,7 @@ export function startPaymentStream(onPayment: PaymentStreamHandler): () => void 
           logger.error({ err }, 'Failed to fetch transaction for payment');
         }
       },
-      onerror: (err: unknown) => {
+      onerror: (err: any) => {
         logger.error({ err }, 'Payment stream error');
       },
     });
