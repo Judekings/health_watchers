@@ -17,9 +17,8 @@ import {
   patientQuerySchema,
   patientSearchQuerySchema,
 } from './patients.validation';
-import { cacheResponse } from '@api/middlewares/cache.middleware';
-import { cache } from '@api/services/cache.service';
-import { CarePlanModel } from '../care-plans/care-plan.model';
+import { createAllergySchema, updateAllergySchema } from './allergy.validation';
+import { auditLog } from '../audit/audit.service';
 
 const router = Router();
 router.use(authenticate);
@@ -499,85 +498,80 @@ router.get(
   }),
 );
 
-// GET /patients/:id/care-plans
+// ── Allergy endpoints ─────────────────────────────────────────────────────────
+
+// GET /patients/:id/allergies
 router.get(
-  '/:id/care-plans',
+  '/:id/allergies',
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findOne({
-      _id: req.params.id,
-      clinicId: req.user!.clinicId,
-      isActive: true,
-    });
+    const patient = await PatientModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
-
-    const plans = await CarePlanModel.find({
-      patientId: req.params.id,
-      clinicId: req.user!.clinicId,
-    })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    // Flag overdue reviews
-    const now = new Date();
-    const data = plans.map((p) => ({
-      ...p,
-      reviewOverdue: p.status === 'active' && p.reviewDate < now,
-    }));
-
-    return res.json({ status: 'success', data });
-  })
+    return res.json({ status: 'success', data: patient.allergies.filter((a) => a.isActive) });
+  }),
 );
 
-// GET /patients/:id/export/pdf - Export patient medical record as PDF
-router.get(
-  '/:id/export/pdf',
+// POST /patients/:id/allergies
+router.post(
+  '/:id/allergies',
+  WRITE_ROLES,
+  validateRequest({ body: createAllergySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const allergy = {
+      ...req.body,
+      recordedBy: req.user!.userId,
+      recordedAt: new Date(),
+      isActive: true,
+      ...(req.body.onsetDate && { onsetDate: new Date(req.body.onsetDate) }),
+    };
+    patient.allergies.push(allergy as any);
+    await patient.save();
+
+    const added = patient.allergies[patient.allergies.length - 1];
+    auditLog({ action: 'ALLERGY_CREATE', resourceType: 'Patient', resourceId: String(patient._id), userId: req.user!.userId, clinicId: req.user!.clinicId, metadata: { allergen: allergy.allergen, severity: allergy.severity } }, req);
+    return res.status(201).json({ status: 'success', data: added });
+  }),
+);
+
+// PUT /patients/:id/allergies/:allergyId
+router.put(
+  '/:id/allergies/:allergyId',
+  WRITE_ROLES,
+  validateRequest({ body: updateAllergySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const allergy = patient.allergies.id(req.params.allergyId);
+    if (!allergy) return res.status(404).json({ error: 'NotFound', message: 'Allergy not found' });
+
+    Object.assign(allergy, req.body);
+    await patient.save();
+
+    auditLog({ action: 'ALLERGY_UPDATE', resourceType: 'Patient', resourceId: String(patient._id), userId: req.user!.userId, clinicId: req.user!.clinicId, metadata: { allergyId: req.params.allergyId } }, req);
+    return res.json({ status: 'success', data: allergy });
+  }),
+);
+
+// DELETE /patients/:id/allergies/:allergyId — soft delete
+router.delete(
+  '/:id/allergies/:allergyId',
   WRITE_ROLES,
   asyncHandler(async (req: Request, res: Response) => {
-    const patient = await PatientModel.findOne({
-      _id: req.params.id,
-      clinicId: req.user!.clinicId,
-      isActive: true,
-    });
-    
-    if (!patient) {
-      return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
-    }
+    const patient = await PatientModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
-    const { generatePatientPDF } = await import('../export/pdf-generator.service');
-    const { ExportLogModel } = await import('../export/export-log.model');
-    const logger = await import('../../utils/logger').then(m => m.default);
+    const allergy = patient.allergies.id(req.params.allergyId);
+    if (!allergy) return res.status(404).json({ error: 'NotFound', message: 'Allergy not found' });
 
-    try {
-      const pdfStream = await generatePatientPDF({
-        patientId: req.params.id,
-        clinicId: req.user!.clinicId,
-      });
+    allergy.isActive = false;
+    await patient.save();
 
-      await ExportLogModel.create({
-        patientId: req.params.id,
-        clinicId: req.user!.clinicId,
-        exportedBy: req.user!.userId,
-        format: 'pdf',
-        exportedAt: new Date(),
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-      });
-
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="medical-record-${patient.systemId}-${Date.now()}.pdf"`
-      );
-
-      pdfStream.pipe(res);
-    } catch (error: any) {
-      logger.error({ error, patientId: req.params.id }, 'PDF export failed');
-      return res.status(500).json({ 
-        error: 'InternalServerError', 
-        message: 'Failed to generate PDF export' 
-      });
-    }
-  })
+    auditLog({ action: 'ALLERGY_DELETE', resourceType: 'Patient', resourceId: String(patient._id), userId: req.user!.userId, clinicId: req.user!.clinicId, metadata: { allergyId: req.params.allergyId } }, req);
+    return res.json({ status: 'success', data: { id: req.params.allergyId, isActive: false } });
+  }),
 );
 
 export const patientRoutes = router;
