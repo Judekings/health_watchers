@@ -38,9 +38,15 @@ import {
   startPaymentExpirationJob,
   stopPaymentExpirationJob,
 } from './modules/payments/services/payment-expiration-job';
+import {
+  startReconciliationJob,
+  stopReconciliationJob,
+} from './modules/payments/services/reconciliation-job';
 import { getCacheMetrics } from './services/cache.service';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
+import { reportRoutes } from './modules/reports/reports.controller';
+import { consentRoutes } from './modules/consent/consent.controller';
 import logger from './utils/logger';
 
 const app = express();
@@ -168,6 +174,8 @@ app.use('/api/v1/settings', clinicSettingsRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/care-plans', carePlanRoutes);
 app.use('/api/v1/portal', portalRoutes);
+app.use('/api/v1/reports', reportRoutes);
+app.use('/api/v1', consentRoutes);
 
 setupSwagger(app);
 
@@ -186,6 +194,7 @@ async function startServer() {
   });
 
   startPaymentExpirationJob();
+  startReconciliationJob();
 
   // Graceful shutdown handler
   const shutdown = async (signal: string) => {
@@ -198,6 +207,7 @@ async function startServer() {
       try {
         // Stop payment expiration job
         stopPaymentExpirationJob();
+        stopReconciliationJob();
         logger.info('Payment expiration job stopped');
 
         // Close database connection
