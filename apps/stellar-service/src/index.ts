@@ -13,6 +13,7 @@ import {
   findPaths,
   getOrderbook,
   checkHorizon,
+  getFeeStats,
 } from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
@@ -112,6 +113,16 @@ app.post('/intent', requireSecret, async (req, res) => {
     return res.json({ success: true, ...result });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /fee-stats (no auth needed)
+app.get('/fee-stats', async (_req, res) => {
+  try {
+    const stats = await getFeeStats();
+    res.json({ success: true, ...stats });
+  } catch (error: any) {
+    res.status(502).json({ error: 'HorizonUnavailable', message: error.message });
   }
 });
 
