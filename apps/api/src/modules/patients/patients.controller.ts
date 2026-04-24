@@ -259,6 +259,10 @@ router.get(
   }),
 );
 
+// GET /patients/:id/export/pdf - Export patient medical record as PDF
+router.get(
+  '/:id/export/pdf',
+  WRITE_ROLES,
 // GET /patients/:id/vitals — all vital sign readings across encounters
 // Query params: ?type=bloodPressure&from=2024-01-01&to=2024-12-31
 router.get(
@@ -269,6 +273,50 @@ router.get(
       clinicId: req.user!.clinicId,
       isActive: true,
     });
+    
+    if (!patient) {
+      return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    }
+
+    // Import PDF generator and export log model
+    const { generatePatientPDF } = await import('../export/pdf-generator.service');
+    const { ExportLogModel } = await import('../export/export-log.model');
+    const logger = await import('../../utils/logger').then(m => m.default);
+
+    try {
+      // Generate PDF stream
+      const pdfStream = await generatePatientPDF({
+        patientId: req.params.id,
+        clinicId: req.user!.clinicId,
+      });
+
+      // Log the export
+      await ExportLogModel.create({
+        patientId: req.params.id,
+        clinicId: req.user!.clinicId,
+        exportedBy: req.user!._id,
+        format: 'pdf',
+        exportedAt: new Date(),
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+
+      // Set response headers
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="medical-record-${patient.systemId}-${Date.now()}.pdf"`
+      );
+
+      // Pipe the PDF stream to response
+      pdfStream.pipe(res);
+    } catch (error: any) {
+      logger.error({ error, patientId: req.params.id }, 'PDF export failed');
+      return res.status(500).json({ 
+        error: 'InternalServerError', 
+        message: 'Failed to generate PDF export' 
+      });
+    }
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
     const filter: Record<string, unknown> = {
