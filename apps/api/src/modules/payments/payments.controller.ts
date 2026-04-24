@@ -142,12 +142,83 @@ router.get(
   })
 );
 
+// GET /payments/paths — discover payment paths
+router.get(
+  '/paths',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { sourceAsset, destinationAsset, amount } = req.query;
+
+    if (!sourceAsset || !destinationAsset || !amount) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'sourceAsset, destinationAsset, and amount are required',
+      });
+    }
+
+    try {
+      const paths = await stellarClient.findPaths({
+        sourceAssetCode: sourceAsset as string,
+        destinationAssetCode: destinationAsset as string,
+        destinationAmount: amount as string,
+        // Assume USDC issuer from config if it's USDC
+        sourceAssetIssuer: sourceAsset === 'USDC' ? config.stellar.usdcIssuer : undefined,
+        destinationAssetIssuer: destinationAsset === 'USDC' ? config.stellar.usdcIssuer : undefined,
+      });
+
+      return res.json({ status: 'success', data: paths });
+    } catch (err: any) {
+      return res.status(502).json({ error: 'StellarServiceError', message: err.message });
+    }
+  })
+);
+
+// GET /payments/stellar/orderbook — get Stellar DEX orderbook
+router.get(
+  '/stellar/orderbook',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { base, counter } = req.query;
+
+    if (!base || !counter) {
+      return res.status(400).json({
+        error: 'BadRequest',
+        message: 'base and counter assets are required',
+      });
+    }
+
+    try {
+      const orderbook = await stellarClient.getOrderbook({
+        baseAssetCode: base as string,
+        counterAssetCode: counter as string,
+        baseAssetIssuer: base === 'USDC' ? config.stellar.usdcIssuer : undefined,
+        counterAssetIssuer: counter === 'USDC' ? config.stellar.usdcIssuer : undefined,
+      });
+
+      return res.json({ status: 'success', data: orderbook });
+    } catch (err: any) {
+      return res.status(502).json({ error: 'StellarServiceError', message: err.message });
+    }
+  })
+);
+
 // POST /payments/intent
 router.post(
   '/intent',
   validateRequest({ body: createPaymentIntentSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { amount, destination, memo, patientId, assetCode = 'XLM', issuer, currency } = req.body;
+    const { 
+      amount, 
+      destination, 
+      memo, 
+      patientId, 
+      assetCode = 'XLM', 
+      issuer, 
+      currency,
+      sourceAssetCode,
+      sourceAssetIssuer,
+      destinationAmount,
+      maxSourceAmount,
+      path,
+    } = req.body;
     const intentId = randomUUID();
     const clinicId = req.user!.clinicId;
     // `currency` takes precedence over `assetCode` for convenience
@@ -181,6 +252,12 @@ router.post(
       status: 'pending',
       assetCode: normalizedAsset,
       assetIssuer: normalizedAsset === 'XLM' ? null : resolvedIssuer,
+      // Path payment fields
+      sourceAssetCode,
+      sourceAssetIssuer,
+      destinationAmount,
+      maxSourceAmount,
+      path,
     });
 
     return res.status(201).json({

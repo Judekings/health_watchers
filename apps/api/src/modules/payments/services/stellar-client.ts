@@ -125,6 +125,37 @@ class StellarClient {
       throw new Error('Stellar service health check failed: unknown error');
     }
   }
+
+  /**
+   * Discover payment paths from stellar-service
+   */
+  async findPaths(params: {
+    sourceAssetCode: string;
+    sourceAssetIssuer?: string;
+    destinationAssetCode: string;
+    destinationAssetIssuer?: string;
+    destinationAmount: string;
+  }): Promise<any[]> {
+    const secret = process.env.STELLAR_SERVICE_SECRET;
+    const response = await this.client.get('/paths', {
+      params,
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    return response.data.data;
+  }
+
+  /**
+   * Get orderbook from stellar-service
+   */
+  async getOrderbook(params: {
+    baseAssetCode: string;
+    baseAssetIssuer?: string;
+    counterAssetCode: string;
+    counterAssetIssuer?: string;
+  }): Promise<any> {
+    const response = await this.client.get('/orderbook', { params });
+    return response.data.data;
+  }
 }
 
 export const stellarClient = new StellarClient();
