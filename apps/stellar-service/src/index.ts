@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import express from 'express';
 import { Server } from 'http';
 import pinoHttp from 'pino-http';
-import { fundAccount, createIntent, verifyIntent } from './stellar.js'; // your existing imports
+import { fundAccount, createIntent, verifyIntent, getAccountBalance, createUsdcTrustline } from './stellar.js';
 import dotenv from 'dotenv';
 import logger from './logger.js';
 
@@ -76,8 +76,67 @@ app.get('/verify/:hash', async (req, res) => {
   }
 });
 
+// ✅ PROTECTED: GET /balance/:publicKey (requires secret)
+app.get('/balance/:publicKey', requireSecret, async (req, res) => {
+  try {
+    const { publicKey } = req.params;
+    const result = await getAccountBalance(publicKey);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /trustline/usdc (requires secret)
+app.post('/trustline/usdc', requireSecret, async (req, res) => {
+  try {
+    const { publicKey, usdcIssuer } = req.body;
+    if (!publicKey || !usdcIssuer) {
+      return res.status(400).json({ error: 'publicKey and usdcIssuer are required' });
+    }
+    const result = await createUsdcTrustline(publicKey, usdcIssuer);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const server: Server = app.listen(PORT, () => {
   logger.info({ port: PORT, secret: SHARED_SECRET ? 'SET' : 'MISSING' }, 'Stellar Service running');
+});
+
+// Graceful shutdown handler
+const shutdown = async (signal: string) => {
+  logger.info(`${signal} received, starting graceful shutdown`);
+
+  // Stop accepting new connections
+  server.close(() => {
+    logger.info('HTTP server closed');
+    logger.info('Graceful shutdown completed');
+    process.exit(0);
+  });
+
+  // Force exit after 30 seconds if graceful shutdown hangs
+  setTimeout(() => {
+    logger.error('Graceful shutdown timeout (30s), forcing exit');
+    process.exit(1);
+  }, 30000);
+};
+
+// Handle termination signals
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err: unknown) => {
+  logger.error({ err }, 'Uncaught exception');
+  shutdown('uncaughtException');
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason: unknown) => {
+  logger.error({ reason }, 'Unhandled rejection');
+  // Log but don't exit - let the process continue
 });
 
 export default server;
