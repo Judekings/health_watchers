@@ -203,6 +203,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
               {amount} {destinationAsset}
             </span>
           </div>
+          <p className="pt-1 text-xs text-neutral-500">
           {pathEstimate && (
             <div className="flex justify-between text-neutral-600">
               <span>Patient Pays (Estimated)</span>
