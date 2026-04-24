@@ -1,18 +1,14 @@
 'use client';
 
 import { useAuth } from '@/context/AuthContext';
+import NotificationBell from '@/components/notifications/NotificationBell';
 
 interface TopBarProps {
   onMenuClick: () => void;
 }
 
 export default function TopBar({ onMenuClick }: TopBarProps) {
-  const { user, setUser } = useAuth();
-
-  const handleLogout = () => {
-    setUser(null);
-    // TODO: clear session/token and redirect to /login
-  };
+  const { user, logout } = useAuth();
 
   return (
     <header className="flex items-center justify-between h-14 px-4 bg-neutral-0 border-b border-neutral-200 shrink-0">
@@ -35,21 +31,22 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
 
       {/* Center: clinic name */}
       <span className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-neutral-700 hidden sm:block">
-        {user?.clinicName ?? 'Health Watchers Clinic'}
+        {user?.clinicName ?? 'Health Watchers'}
       </span>
 
-      {/* Right: avatar + logout */}
+      {/* Right: notification bell + avatar + logout */}
       <div className="flex items-center gap-3">
+        <NotificationBell />
         <div
           className="w-8 h-8 rounded-full bg-primary-500 text-white text-xs font-bold flex items-center justify-center select-none"
-          aria-label={`Logged in as ${user?.name}`}
+          aria-label={user ? `Logged in as ${user.name}` : 'Not logged in'}
           title={user?.name}
         >
           {user?.avatarInitials ?? '?'}
         </div>
         <button
           type="button"
-          onClick={handleLogout}
+          onClick={logout}
           className="text-sm text-neutral-500 hover:text-neutral-800 focus:outline-none focus:underline"
           aria-label="Log out"
         >

@@ -67,6 +67,7 @@ async function resetPasswordHandler(
   const tokenHash = hashToken(body.token);
   const user = await (UserModel as any).findOne({
     resetPasswordTokenHash: tokenHash,
+    resetPasswordExpiresAt: { $gt: new Date() },
     resetPasswordExpiresAt: { $gt: expect.any(Date) },
   });
 
@@ -128,7 +129,12 @@ describe('POST /auth/forgot-password', () => {
 
   it('sets expiry ~1 hour in the future', async () => {
     const saveMock = jest.fn().mockResolvedValue(undefined);
-    const user = { email: 'x@x.com', resetPasswordTokenHash: undefined, resetPasswordExpiresAt: undefined, save: saveMock };
+    const user: {
+      email: string;
+      resetPasswordTokenHash: string | undefined;
+      resetPasswordExpiresAt: Date | undefined;
+      save: jest.Mock;
+    } = { email: 'x@x.com', resetPasswordTokenHash: undefined, resetPasswordExpiresAt: undefined, save: saveMock };
     (UserModel.findOne as jest.Mock).mockResolvedValue(user);
     const res = makeRes();
     const before = Date.now();
@@ -185,5 +191,15 @@ describe('POST /auth/reset-password', () => {
     const queryArg = (UserModel.findOne as jest.Mock).mock.calls[0][0];
     expect(queryArg.resetPasswordTokenHash).toBe(hashToken(rawToken));
     expect(queryArg.resetPasswordTokenHash).not.toBe(rawToken);
+  });
+
+  it('already-used token returns 400 (token cleared after use)', async () => {
+    // Simulate token already consumed: findOne returns null (token was cleared)
+    (UserModel.findOne as jest.Mock).mockResolvedValue(null);
+    const res = makeRes();
+
+    await resetPasswordHandler({ token: 'usedtoken', newPassword: 'NewPass1!' }, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 });

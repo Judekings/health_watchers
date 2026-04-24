@@ -8,6 +8,7 @@ import cors from 'cors';
 import compression from 'compression';
 import pinoHttp from 'pino-http';
 import mongoSanitize from 'express-mongo-sanitize';
+import mongoose from 'mongoose';
 import { connectDB } from './config/db';
 import { authRoutes } from './modules/auth/auth.controller';
 import { userRoutes } from './modules/users/users.controller';
@@ -23,6 +24,11 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { authLimiter, forgotPasswordLimiter, aiLimiter, paymentLimiter, generalLimiter } from './middlewares/rate-limit.middleware';
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
+import { labResultRoutes } from './modules/lab-results/lab-results.controller';
+import { icd10Routes } from './modules/icd10/icd10.controller';
+import { apiVersionHeader } from './middlewares/versioning.middleware';
+import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
+import { notificationRoutes } from './modules/notifications/notifications.controller';
 import {
   startPaymentExpirationJob,
   stopPaymentExpirationJob,
@@ -32,10 +38,10 @@ import logger from './utils/logger';
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 50kb)
-const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? '50kb';
-// AI routes allow larger payloads for summarization (default 500kb)
-const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '500kb';
+// Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 10kb per issue #351)
+const standardLimit = process.env.MAX_REQUEST_BODY_SIZE ?? '10kb';
+// AI routes allow larger payloads for clinical notes (default 50kb per issue #351)
+const aiLimit = process.env.AI_REQUEST_BODY_SIZE ?? '50kb';
 
 // ── Security & performance ────────────────────────────────────────────────────
 app.use(
@@ -91,11 +97,41 @@ app.use(
 
 // ── Body parsing & sanitization ───────────────────────────────────────────────
 app.use(express.json({ limit: standardLimit }));
+app.use(express.urlencoded({ extended: true, limit: standardLimit }));
 app.use(mongoSanitize({ replaceWith: '_' }));
+
+// ── Content-Type validation (issue #351) ──────────────────────────────────────
+// Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
+    if (!req.is('application/json') && !req.is('application/x-www-form-urlencoded')) {
+      return res.status(415).json({ error: 'UnsupportedMediaType', message: 'Content-Type must be application/json' });
+    }
+  }
+  next();
+});
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) =>
   res.json({ status: 'ok', service: 'health-watchers-api', timestamp: new Date().toISOString() }),
+);
+
+// ── API version header on all /api/* responses ────────────────────────────────
+app.use('/api', apiVersionHeader('1.0'));
+
+// ── API versions endpoint ─────────────────────────────────────────────────────
+app.get('/api/versions', (_req, res) =>
+  res.json({
+    versions: [
+      {
+        version: 'v1',
+        status: 'current',
+        baseUrl: '/api/v1',
+        releaseDate: '2024-01-01',
+      },
+    ],
+    current: 'v1',
+  }),
 );
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -112,6 +148,10 @@ app.use('/api/v1/audit-logs', auditLogRoutes);
 app.use('/api/v1/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
+app.use('/api/v1/icd10', icd10Routes);
+app.use('/api/v1/lab-results', labResultRoutes);
+app.use('/api/v1/settings', clinicSettingsRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 
 setupSwagger(app);
 
@@ -131,18 +171,53 @@ async function startServer() {
 
   startPaymentExpirationJob();
 
-  const shutdown = async () => {
-    stopPaymentExpirationJob();
-    server.close(() => process.exit(0));
+  // Graceful shutdown handler
+  const shutdown = async (signal: string) => {
+    logger.info(`${signal} received, starting graceful shutdown`);
+
+    // Stop accepting new connections
+    server.close(async () => {
+      logger.info('HTTP server closed');
+
+      try {
+        // Stop payment expiration job
+        stopPaymentExpirationJob();
+        logger.info('Payment expiration job stopped');
+
+        // Close database connection
+        await mongoose.connection.close();
+        logger.info('MongoDB connection closed');
+
+        logger.info('Graceful shutdown completed');
+        process.exit(0);
+      } catch (err) {
+        logger.error({ err }, 'Error during graceful shutdown');
+        process.exit(1);
+      }
+    });
+
+    // Force exit after 30 seconds if graceful shutdown hangs
+    setTimeout(() => {
+      logger.error('Graceful shutdown timeout (30s), forcing exit');
+      process.exit(1);
+    }, 30000);
   };
 
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
-}
+  // Handle termination signals
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 
-process.on('unhandledRejection', (err: unknown) => {
-  logger.error({ err }, 'Unhandled rejection');
-  process.exit(1);
-});
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (err: unknown) => {
+    logger.error({ err }, 'Uncaught exception');
+    shutdown('uncaughtException');
+  });
+
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (reason: unknown) => {
+    logger.error({ reason }, 'Unhandled rejection');
+    // Log but don't exit - let the process continue
+  });
+}
 
 startServer();

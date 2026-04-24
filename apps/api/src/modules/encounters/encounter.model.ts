@@ -18,19 +18,25 @@ export interface Diagnosis {
 }
 
 export interface Prescription {
-  medication: string;
-  dosage: string;
-  frequency: string;
-  duration?: string;
-  notes?: string;
+  drugName: string;          // Required
+  genericName?: string;      // Optional
+  dosage: string;            // e.g., '500mg'
+  frequency: string;         // e.g., 'twice daily'
+  duration: string;          // e.g., '7 days'
+  route: 'oral' | 'topical' | 'injection' | 'inhaled' | 'other';
+  instructions?: string;     // Special instructions
+  prescribedBy: Schema.Types.ObjectId;  // userId of prescribing doctor
+  prescribedAt: Date;
+  refillsAllowed: number;    // Default 0
 }
 
 export interface Encounter {
   patientId: Schema.Types.ObjectId;
   clinicId: Schema.Types.ObjectId;
   attendingDoctorId: Schema.Types.ObjectId;
+  encounteredBy?: Schema.Types.ObjectId; // alias for attendingDoctorId (spec compat)
   chiefComplaint: string;
-  status: "open" | "closed" | "follow-up";
+  status: "open" | "closed" | "follow-up" | "cancelled";
   notes?: string;
   diagnosis?: Diagnosis[];
   treatmentPlan?: string;
@@ -65,12 +71,18 @@ const diagnosisSchema = new Schema<Diagnosis>(
 
 const prescriptionSchema = new Schema<Prescription>(
   {
-    medication: { type: String, required: true },
-    dosage:     { type: String, required: true },
-    frequency:  { type: String, required: true },
-    duration:   { type: String },
-    notes:      { type: String },
+    drugName:        { type: String, required: true },
+    genericName:     { type: String },
+    dosage:          { type: String, required: true },
+    frequency:       { type: String, required: true },
+    duration:        { type: String, required: true },
+    route:           { type: String, enum: ['oral', 'topical', 'injection', 'inhaled', 'other'], required: true },
+    instructions:    { type: String },
+    prescribedBy:    { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    prescribedAt:    { type: Date, default: Date.now },
+    refillsAllowed:  { type: Number, default: 0 },
   },
+  { timestamps: true }
 );
 
 const encounterSchema = new Schema<Encounter>(
@@ -78,8 +90,9 @@ const encounterSchema = new Schema<Encounter>(
     patientId:         { type: Schema.Types.ObjectId, ref: "Patient",  required: true, index: true },
     clinicId:          { type: Schema.Types.ObjectId, ref: "Clinic",   required: true, index: true },
     attendingDoctorId: { type: Schema.Types.ObjectId, ref: "User",     required: true, index: true },
+    encounteredBy:     { type: Schema.Types.ObjectId, ref: "User" },
     chiefComplaint:    { type: String, required: true },
-    status:            { type: String, enum: ["open", "closed", "follow-up"], default: "open", index: true },
+    status:            { type: String, enum: ["open", "closed", "follow-up", "cancelled"], default: "open", index: true },
     notes:             { type: String },
     treatmentPlan:     { type: String },
     diagnosis:         { type: [diagnosisSchema], default: undefined },
@@ -91,6 +104,9 @@ const encounterSchema = new Schema<Encounter>(
   },
   { timestamps: true, versionKey: false }
 );
+
+// Compound index for paginated clinic-scoped queries
+encounterSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });
 
 const FREE_TEXT_FIELDS = ["chiefComplaint", "notes", "treatmentPlan", "aiSummary"] as const;
 
