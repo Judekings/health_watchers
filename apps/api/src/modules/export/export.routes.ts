@@ -52,6 +52,18 @@ router.get('/patients/:id/export', authenticate, async (req: Request, res: Respo
         .status(403)
         .json({ error: 'Forbidden', message: 'Access denied to this patient record' });
 
+    // Check data_sharing consent for staff-initiated exports
+    if (isStaff && !isSuperAdmin) {
+      const { hasConsent } = await import('../consent/consent.controller');
+      const consentGranted = await hasConsent(id, clinicId, 'data_sharing');
+      if (!consentGranted) {
+        return res.status(403).json({
+          error: 'ConsentRequired',
+          message: 'Patient has not consented to data sharing. Please obtain consent first.',
+        });
+      }
+    }
+
     auditLog(
       { action: 'EXPORT_PATIENT_DATA', resourceType: 'Patient', resourceId: id, userId, clinicId },
       req
