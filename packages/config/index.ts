@@ -19,6 +19,7 @@ export const config = {
 
   // Database Configuration
   mongoUri: process.env.MONGO_URI || '',
+  mongoMaxPool: parseInt(process.env.MONGO_MAX_POOL_SIZE || '10', 10),
 
   // JWT Authentication
   jwt: {
