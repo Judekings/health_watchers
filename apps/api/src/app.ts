@@ -34,13 +34,21 @@ import { icd10Routes } from './modules/icd10/icd10.controller';
 import { apiVersionHeader } from './middlewares/versioning.middleware';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
 import { notificationRoutes } from './modules/notifications/notifications.controller';
+import { referralRoutes } from './modules/referrals/referrals.controller';
+import { invoiceRoutes } from './modules/invoices/invoices.controller';
 import {
   startPaymentExpirationJob,
   stopPaymentExpirationJob,
 } from './modules/payments/services/payment-expiration-job';
+import {
+  startReconciliationJob,
+  stopReconciliationJob,
+} from './modules/payments/services/reconciliation-job';
 import { getCacheMetrics } from './services/cache.service';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
+import { reportRoutes } from './modules/reports/reports.controller';
+import { consentRoutes } from './modules/consent/consent.controller';
 import logger from './utils/logger';
 
 const app = express();
@@ -69,7 +77,22 @@ app.use(
     hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
   })
 );
-app.use(compression());
+app.use(
+  compression({
+    level: 6,
+    threshold: 1024, // only compress responses > 1KB
+    filter: (req, res) => {
+      // Skip already-compressed content types (images, PDFs, etc.)
+      const contentType = res.getHeader('Content-Type') as string | undefined;
+      if (contentType) {
+        if (/^image\//i.test(contentType)) return false;
+        if (contentType === 'application/pdf') return false;
+        if (contentType === 'application/zip') return false;
+      }
+      return compression.filter(req, res);
+    },
+  }),
+);
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
@@ -166,8 +189,12 @@ app.use('/api/v1/icd10', icd10Routes);
 app.use('/api/v1/lab-results', labResultRoutes);
 app.use('/api/v1/settings', clinicSettingsRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/referrals', referralRoutes);
+app.use('/api/v1/invoices', invoiceRoutes);
 app.use('/api/v1/care-plans', carePlanRoutes);
 app.use('/api/v1/portal', portalRoutes);
+app.use('/api/v1/reports', reportRoutes);
+app.use('/api/v1', consentRoutes);
 
 setupSwagger(app);
 
@@ -186,6 +213,7 @@ async function startServer() {
   });
 
   startPaymentExpirationJob();
+  startReconciliationJob();
 
   // Graceful shutdown handler
   const shutdown = async (signal: string) => {
@@ -198,6 +226,7 @@ async function startServer() {
       try {
         // Stop payment expiration job
         stopPaymentExpirationJob();
+        stopReconciliationJob();
         logger.info('Payment expiration job stopped');
 
         // Close database connection

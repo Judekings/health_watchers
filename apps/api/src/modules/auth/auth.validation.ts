@@ -118,6 +118,16 @@ export const resetPasswordSchema = z.object({
   newPassword: passwordSchema,
 });
 
+export const mfaBackupCodeSchema = z.object({
+  tempToken: z.string().min(1),
+  backupCode: z.string().min(1),
+});
+
+export const mfaDisableSchema = z.object({
+  password: z.string().min(1),
+  totp: z.string().length(6),
+});
+
 export type LoginDto = z.infer<typeof loginSchema>;
 export type RegisterDto = z.infer<typeof registerSchema>;
 export type RefreshDto = z.infer<typeof refreshSchema>;
@@ -125,3 +135,5 @@ export type MfaVerifyDto = z.infer<typeof mfaVerifySchema>;
 export type MfaChallengeDto = z.infer<typeof mfaChallengeSchema>;
 export type ForgotPasswordDto = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordDto = z.infer<typeof resetPasswordSchema>;
+export type MfaBackupCodeDto = z.infer<typeof mfaBackupCodeSchema>;
+export type MfaDisableDto = z.infer<typeof mfaDisableSchema>;

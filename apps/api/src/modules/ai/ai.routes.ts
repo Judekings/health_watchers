@@ -9,7 +9,7 @@ import {
 } from './ai.service';
 import { authenticate, requireRoles } from '../../middlewares/auth.middleware';
 import logger from '../../utils/logger';
-import { sendAiSummaryReadyEmail } from '@api/lib/email.service';
+import { sendAISummaryNotification } from '@api/lib/email.service';
 
 const router = Router();
 
@@ -40,6 +40,7 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
     }
 
     let summary: string;
+    let encounter: any;
 
     if (text) {
       // Raw text input
@@ -60,9 +61,23 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
       }
 
       const { EncounterModel } = await import('../encounters/encounter.model');
-      const encounter = await EncounterModel.findById(encounterId);
+      encounter = await EncounterModel.findById(encounterId);
       if (!encounter) {
         return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
+      }
+
+      // Check ai_analysis consent
+      const { hasConsent } = await import('../consent/consent.controller');
+      const consentGranted = await hasConsent(
+        String(encounter.patientId),
+        req.user!.clinicId,
+        'ai_analysis'
+      );
+      if (!consentGranted) {
+        return res.status(403).json({
+          error: 'ConsentRequired',
+          message: 'Patient has not consented to AI analysis. Please obtain consent first.',
+        });
       }
 
       summary = await generateClinicalSummary({
@@ -81,19 +96,21 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
     logger.info({ encounterId, duration, textLength: text?.length }, 'AI summary generated');
 
     // Notify attending doctor (non-blocking)
-    try {
-      const { UserModel } = await import('../auth/models/user.model');
-      const { PatientModel } = await import('../patients/models/patient.model');
-      const [doctor, patient] = await Promise.all([
-        UserModel.findById(encounter.attendingDoctorId).lean(),
-        PatientModel.findById(encounter.patientId).lean(),
-      ]);
-      if (doctor?.email && patient) {
-        const patientName = `${(patient as any).firstName} ${(patient as any).lastName}`;
-        sendAiSummaryReadyEmail(doctor.email, patientName, encounterId);
+    if (encounter) {
+      try {
+        const { UserModel } = await import('../auth/models/user.model');
+        const { PatientModel } = await import('../patients/models/patient.model');
+        const [doctor, patient] = await Promise.all([
+          UserModel.findById(encounter.attendingDoctorId).lean(),
+          PatientModel.findById(encounter.patientId).lean(),
+        ]);
+        if (doctor?.email && patient) {
+          const patientName = `${(patient as any).firstName} ${(patient as any).lastName}`;
+          sendAISummaryNotification(doctor.email, patientName, encounterId);
+        }
+      } catch {
+        /* non-critical */
       }
-    } catch {
-      /* non-critical */
     }
 
     return res.json({
@@ -209,6 +226,8 @@ router.post('/drug-interactions', authenticate, async (req: Request, res: Respon
     message: 'Drug interaction checking is not yet implemented. This feature will be available in a future release.',
     requestedMedications: req.body.medications || [],
   });
+});
+
 // POST /api/v1/ai/health-trends
 // Request body: { patientId: string }
 // Returns: { success: boolean, summary: string }
@@ -325,8 +344,6 @@ Provide a plain-language clinical interpretation:`;
   }
 });
 
-export default router;
-
 // POST /api/v1/ai/generate-care-plan
 // Input: { patientId, condition, icdCode? }
 // Returns: AI-suggested care plan (not saved — doctor must approve via POST /care-plans)
@@ -416,3 +433,5 @@ Respond ONLY with a valid JSON object matching this exact structure (no markdown
     }
   }
 );
+
+export default router;

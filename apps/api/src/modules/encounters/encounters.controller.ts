@@ -27,7 +27,6 @@ async function validateDiagnosisCodes(diagnoses?: { code: string }[]): Promise<s
 const router = Router();
 router.use(authenticate);
 
-// GET /encounters
 // GET /encounters — paginated list scoped to the authenticated clinic
 router.get(
   '/',
@@ -46,26 +45,6 @@ router.get(
         .skip(skip)
         .limit(limit)
         .lean(),
-    const { patientId, doctorId, status, date, page, limit } =
-      req.query as unknown as ListEncountersQuery;
-
-    const filter: Record<string, unknown> = {
-      clinicId: req.user!.clinicId,
-      isActive: true,
-    };
-    if (patientId) filter.patientId = patientId;
-    if (doctorId) filter.attendingDoctorId = doctorId;
-    if (status) filter.status = status;
-    if (date) {
-      const start = new Date(date);
-      const end = new Date(date);
-      end.setDate(end.getDate() + 1);
-      filter.createdAt = { $gte: start, $lt: end };
-    }
-
-    const skip = (page - 1) * limit;
-    const [docs, total] = await Promise.all([
-      EncounterModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       EncounterModel.countDocuments(filter),
     ]);
 
@@ -89,7 +68,10 @@ router.post(
         .status(400)
         .json({ error: 'BadRequest', message: `Invalid ICD-10 code: '${invalidCode}'` });
     }
-    const doc = await EncounterModel.create(req.body);
+    const doc = await EncounterModel.create({
+      ...req.body,
+      clinicId: req.user!.clinicId,
+    });
     return res.status(201).json({ status: 'success', data: toEncounterResponse(doc) });
   })
 );
@@ -149,7 +131,7 @@ router.patch(
     }
 
     if (updateData.diagnosis) {
-      const invalidCode = await validateDiagnosisCodes(updateData.diagnosis);
+      const invalidCode = await validateDiagnosisCodes(updateData.diagnosis as any);
       if (invalidCode) {
         return res
           .status(400)
@@ -228,7 +210,7 @@ router.post(
 
     const prescription: Prescription = {
       ...req.body,
-      prescribedBy: req.user!._id,
+      prescribedBy: req.user!.userId,
       prescribedAt: new Date(),
     };
 
