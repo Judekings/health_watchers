@@ -38,9 +38,11 @@ export interface User {
   emailVerificationTokenHash?: string;
   mfaEnabled: boolean;
   mfaSecret?: string;
+  mfaBackupCodes?: string[]; // hashed backup codes
   resetPasswordTokenHash?: string;
   resetPasswordExpiresAt?: Date;
   failedLoginAttempts: number;
+  failedMfaAttempts: number;
   lockedUntil?: Date; // brute-force protection
   preferences: UserPreferences;
 }
@@ -74,6 +76,12 @@ const userSchema = new Schema(
       select: false,
       default: undefined,
     },
+    mfaBackupCodes: {
+      type: [String],
+      required: false,
+      select: false,
+      default: undefined,
+    },
     resetPasswordTokenHash: {
       type: String,
       required: false,
@@ -88,6 +96,7 @@ const userSchema = new Schema(
       index: true,
     },
     failedLoginAttempts: { type: Number, required: false, default: 0 },
+    failedMfaAttempts: { type: Number, required: false, default: 0 },
     lockedUntil: {
       type: Date,
       required: false,

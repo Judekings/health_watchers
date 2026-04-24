@@ -11,6 +11,8 @@ import {
   MfaChallengeDto,
   ForgotPasswordDto,
   ResetPasswordDto,
+  MfaBackupCodeDto,
+  MfaDisableDto,
   loginSchema,
   refreshSchema,
   registerSchema,
@@ -18,6 +20,8 @@ import {
   mfaChallengeSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  mfaBackupCodeSchema,
+  mfaDisableSchema,
 } from './auth.validation';
 import { sendPasswordResetEmail } from '@api/lib/email.service';
 import { UserModel } from './models/user.model';
@@ -33,15 +37,28 @@ import {
 import { RefreshTokenModel } from './models/refresh-token.model';
 import { totpService } from './totp.service';
 import { sendVerificationEmail, sendWelcomeEmail } from '@api/lib/email.service';
+import { encrypt, decrypt } from '@api/lib/encrypt';
+import { auditLog } from '../audit/audit.service';
 
 const router = Router();
 const INVALID = 'Invalid email or password';
 const MAX_FAILED_ATTEMPTS = 5;
+const MAX_MFA_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+// Roles that must have 2FA enabled
+const MFA_REQUIRED_ROLES = new Set(['CLINIC_ADMIN', 'SUPER_ADMIN']);
 
 /** SHA-256 hash of a token for safe storage */
 function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/** Generate 10 single-use backup codes */
+function generateBackupCodes(): { plain: string[]; hashed: string[] } {
+  const plain = Array.from({ length: 10 }, () => crypto.randomBytes(5).toString('hex'));
+  const hashed = plain.map(hashToken);
+  return { plain, hashed };
 }
 
 // ── Role hierarchy: who can create whom ──────────────────────────────────────
@@ -154,6 +171,16 @@ router.post(
       return res.json({
         status: 'mfa_required',
         data: { mfaRequired: true, tempToken: signTempToken(user.id) },
+      });
+    }
+
+    // Enforce 2FA for admin roles — block login if not set up
+    if (MFA_REQUIRED_ROLES.has(user.role) && !user.mfaEnabled) {
+      return res.status(403).json({
+        error: 'MfaRequired',
+        message: '2FA is mandatory for your role. Please set up 2FA before logging in.',
+        requiresMfaSetup: true,
+        tempToken: signTempToken(user.id),
       });
     }
 
@@ -272,7 +299,7 @@ router.post('/mfa/setup', authenticate, async (req: Request, res: Response) => {
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
   const { secret, otpauthUrl, qrCodeDataUrl } = await totpService.setup(user.email);
-  user.mfaSecret = secret;
+  user.mfaSecret = encrypt(secret); // store encrypted
   await user.save();
 
   return res.json({ status: 'success', data: { otpauthUrl, qrCodeDataUrl } });
@@ -292,17 +319,25 @@ router.post(
   authenticate,
   validateRequest({ body: mfaVerifySchema }),
   async (req: Request<Record<string, never>, unknown, MfaVerifyDto>, res: Response) => {
-    const user = await UserModel.findById(req.user!.userId).select('+mfaSecret');
+    const user = await UserModel.findById(req.user!.userId).select('+mfaSecret +mfaBackupCodes');
     if (!user || !user.mfaSecret)
       return res.status(401).json({ error: 'Unauthorized', message: 'MFA setup not initiated' });
 
-    const valid = totpService.verify(req.body.totp, user.mfaSecret);
+    const plainSecret = decrypt(user.mfaSecret);
+    const valid = totpService.verify(req.body.totp, plainSecret);
     if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
 
+    const { plain, hashed } = generateBackupCodes();
     user.mfaEnabled = true;
+    user.mfaBackupCodes = hashed;
     await user.save();
 
-    return res.json({ status: 'success', data: { mfaEnabled: true } });
+    await auditLog(
+      { action: 'LOGIN_SUCCESS', userId: user.id, clinicId: String(user.clinicId), metadata: { event: '2fa_enabled' } },
+      req
+    );
+
+    return res.json({ status: 'success', data: { mfaEnabled: true, backupCodes: plain } });
   }
 );
 
@@ -327,8 +362,34 @@ router.post(
     if (!user || !user.isActive || !user.mfaEnabled || !user.mfaSecret)
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid session' });
 
-    const valid = totpService.verify(req.body.totp, user.mfaSecret);
-    if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
+    // Check MFA brute-force lock
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const retryAfterSecs = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 1000);
+      res.set('Retry-After', String(retryAfterSecs));
+      return res.status(423).json({
+        error: 'AccountLocked',
+        message: 'Account is temporarily locked due to too many failed MFA attempts.',
+        retryAfter: retryAfterSecs,
+      });
+    }
+
+    const plainSecret = decrypt(user.mfaSecret);
+    const valid = totpService.verify(req.body.totp, plainSecret);
+    if (!valid) {
+      user.failedMfaAttempts = (user.failedMfaAttempts ?? 0) + 1;
+      if (user.failedMfaAttempts >= MAX_MFA_ATTEMPTS) {
+        user.lockedUntil = new Date(Date.now() + LOCK_DURATION_MS);
+      }
+      await user.save();
+      return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
+    }
+
+    // Reset MFA attempts on success
+    if (user.failedMfaAttempts > 0) {
+      user.failedMfaAttempts = 0;
+      user.lockedUntil = undefined;
+      await user.save();
+    }
 
     const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
     const { token: refreshToken, jti, family } = signRefreshToken(p);
@@ -343,6 +404,101 @@ router.post(
       status: 'success',
       data: { accessToken: signAccessToken(p), refreshToken },
     });
+  }
+);
+
+/**
+ * @swagger
+ * /auth/mfa/backup:
+ *   post:
+ *     summary: Use a backup code instead of TOTP for MFA login
+ *     tags: [Auth]
+ */
+router.post(
+  '/mfa/backup',
+  validateRequest({ body: mfaBackupCodeSchema }),
+  async (req: Request<Record<string, never>, unknown, MfaBackupCodeDto>, res: Response) => {
+    const userId = verifyTempToken(req.body.tempToken);
+    if (!userId)
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired temp token' });
+
+    const user = await UserModel.findById(userId).select('+mfaBackupCodes');
+    if (!user || !user.isActive || !user.mfaEnabled || !user.mfaBackupCodes)
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid session' });
+
+    const codeHash = hashToken(req.body.backupCode);
+    const idx = user.mfaBackupCodes.indexOf(codeHash);
+    if (idx === -1) {
+      return res.status(400).json({ error: 'InvalidCode', message: 'Invalid or already used backup code' });
+    }
+
+    // Mark code as used by removing it
+    user.mfaBackupCodes.splice(idx, 1);
+    await user.save();
+
+    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId) };
+    const { token: refreshToken, jti, family } = signRefreshToken(p);
+    await RefreshTokenModel.create({
+      jti,
+      userId: user.id,
+      family,
+      consumed: false,
+      expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS),
+    });
+    return res.json({
+      status: 'success',
+      data: { accessToken: signAccessToken(p), refreshToken, remainingBackupCodes: user.mfaBackupCodes.length },
+    });
+  }
+);
+
+/**
+ * @swagger
+ * /auth/mfa/disable:
+ *   delete:
+ *     summary: Disable 2FA (requires password + TOTP)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete(
+  '/mfa/disable',
+  authenticate,
+  validateRequest({ body: mfaDisableSchema }),
+  async (req: Request<Record<string, never>, unknown, MfaDisableDto>, res: Response) => {
+    const user = await UserModel.findById(req.user!.userId).select('+password +mfaSecret +mfaBackupCodes');
+    if (!user || !user.mfaEnabled)
+      return res.status(400).json({ error: 'BadRequest', message: '2FA is not enabled' });
+
+    // Verify password
+    const passwordValid = await bcrypt.compare(req.body.password, user.password);
+    if (!passwordValid)
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid password' });
+
+    // Verify TOTP
+    const plainSecret = decrypt(user.mfaSecret!);
+    const valid = totpService.verify(req.body.totp, plainSecret);
+    if (!valid) return res.status(400).json({ error: 'InvalidCode', message: 'Invalid TOTP code' });
+
+    // Prevent disabling 2FA for admin roles
+    if (MFA_REQUIRED_ROLES.has(user.role)) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: '2FA is mandatory for your role and cannot be disabled',
+      });
+    }
+
+    user.mfaEnabled = false;
+    user.mfaSecret = undefined;
+    user.mfaBackupCodes = undefined;
+    await user.save();
+
+    await auditLog(
+      { action: 'LOGIN_SUCCESS', userId: user.id, clinicId: String(user.clinicId), metadata: { event: '2fa_disabled' } },
+      req
+    );
+
+    return res.json({ status: 'success', data: { mfaEnabled: false } });
   }
 );
 

@@ -66,6 +66,20 @@ router.post('/summarize', authenticate, async (req: Request, res: Response) => {
         return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
       }
 
+      // Check ai_analysis consent
+      const { hasConsent } = await import('../consent/consent.controller');
+      const consentGranted = await hasConsent(
+        String(encounter.patientId),
+        req.user!.clinicId,
+        'ai_analysis'
+      );
+      if (!consentGranted) {
+        return res.status(403).json({
+          error: 'ConsentRequired',
+          message: 'Patient has not consented to AI analysis. Please obtain consent first.',
+        });
+      }
+
       summary = await generateClinicalSummary({
         chiefComplaint: encounter.chiefComplaint,
         notes: encounter.notes,

@@ -69,6 +69,74 @@ export function sendPaymentConfirmationEmail(to: string, amount: string, assetCo
 
 export function sendAISummaryNotification(to: string, patientName: string, encounterId: string) {
   const APP_BASE_URL = config.portalUrl || 'http://localhost:3000';
+/** Payment confirmation email sent when Stellar transaction confirms */
+export function sendPaymentConfirmationEmail(
+  to: string,
+  amount: string,
+  assetCode: string,
+  txHash: string
+): void {
+  const explorerUrl = `https://stellar.expert/explorer/testnet/tx/${txHash}`;
+  const text = `Your payment of ${amount} ${assetCode} has been confirmed.\n\nTransaction: ${txHash}\nView on explorer: ${explorerUrl}`;
+  const html = `
+    <h3>Payment Confirmed</h3>
+    <p>Your payment of <strong>${amount} ${assetCode}</strong> has been confirmed on the Stellar network.</p>
+    <p><strong>Transaction hash:</strong> <code>${txHash}</code></p>
+    <p><a href="${explorerUrl}">View on Stellar Explorer</a></p>
+  `;
+  enqueue(to, `Payment Confirmed — ${amount} ${assetCode}`, text, html);
+}
+
+/** Invoice email sent to patient with QR code and payment link */
+export function sendInvoiceEmail(
+  to: string,
+  invoice: {
+    invoiceNumber: string;
+    total: string;
+    currency: string;
+    dueDate: Date;
+    stellarPayURI: string;
+    qrCodeDataUrl: string;
+  },
+): void {
+  const dueDateStr = invoice.dueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const text = `Invoice ${invoice.invoiceNumber}\n\nAmount due: ${invoice.total} ${invoice.currency}\nDue date: ${dueDateStr}\n\nPay via Stellar: ${invoice.stellarPayURI}`;
+  const html = `
+    <h2>Invoice ${invoice.invoiceNumber}</h2>
+    <p><strong>Amount due:</strong> ${invoice.total} ${invoice.currency}</p>
+    <p><strong>Due date:</strong> ${dueDateStr}</p>
+    <p><a href="${invoice.stellarPayURI}">Pay with Stellar Wallet</a></p>
+    <p>Or scan the QR code below:</p>
+    <img src="${invoice.qrCodeDataUrl}" alt="Stellar payment QR code" width="200" height="200" />
+  `;
+  enqueue(to, `Invoice ${invoice.invoiceNumber} — Health Watchers`, text, html);
+}
+
+/** Referral notification sent to receiving clinic admin */
+export function sendReferralNotificationEmail(
+  to: string,
+  adminName: string,
+  referral: { patientName: string; urgency: string; reason: string; referralId: string },
+): void {
+  const referralUrl = `${APP_BASE_URL}/referrals/incoming`;
+  const urgencyLabel = referral.urgency.toUpperCase();
+  const text = `A new ${urgencyLabel} referral has been received for patient ${referral.patientName}.\n\nReason: ${referral.reason}\n\nView referral: ${referralUrl}`;
+  const html = `
+    <h3>New Patient Referral Received</h3>
+    <p>Hello ${adminName},</p>
+    <p>A new <strong>${urgencyLabel}</strong> referral has been received for patient <strong>${referral.patientName}</strong>.</p>
+    <p><strong>Reason:</strong> ${referral.reason}</p>
+    <p><a href="${referralUrl}">View Incoming Referrals</a></p>
+  `;
+  enqueue(to, `New ${urgencyLabel} Referral — Health Watchers`, text, html);
+}
+
+/** AI summary ready notification sent when clinical summary is generated */
+export function sendAiSummaryReadyEmail(
+  to: string,
+  patientName: string,
+  encounterId: string
+): void {
   const encounterUrl = `${APP_BASE_URL}/encounters/${encounterId}`;
   const text = `The AI clinical summary for ${patientName}'s encounter is ready.\n\nView it here: ${encounterUrl}`;
   const html = `
