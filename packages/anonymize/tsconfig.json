@@ -2,10 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
-    "lib": ["ES2020"],
-    "types": ["node", "jest"],
-    "ignoreDeprecations": "5.0"
+    "rootDir": "src"
   },
   "include": ["src"]
 }

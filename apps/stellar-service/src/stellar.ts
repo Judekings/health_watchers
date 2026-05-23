@@ -55,11 +55,11 @@ export async function fundAccount(publicKey: string, amount?: number) {
     );
 
     if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
+      const body = await response.json().catch(() => ({})) as { detail?: string };
       throw new Error(body.detail ?? `Friendbot request failed: ${response.statusText}`);
     }
 
-    const json = await response.json();
+    const json = await response.json() as { hash: string; ledger: number };
     logger.info({ publicKey }, 'Account funded successfully');
     
     return {
@@ -377,7 +377,7 @@ export async function buildFeeBumpTransaction(innerXdr: string): Promise<{
   }
 
   const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
-  const { Transaction, FeeBumpTransaction } = await import('@stellar/stellar-sdk');
+  const { Transaction } = await import('@stellar/stellar-sdk');
 
   // Deserialise the inner transaction
   const innerTx = new Transaction(innerXdr, getNetworkPassphrase());

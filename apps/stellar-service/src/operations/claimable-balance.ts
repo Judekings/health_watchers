@@ -1,4 +1,5 @@
 import * as StellarSdk from '@stellar/stellar-sdk';
+import type { ServerApi } from '@stellar/stellar-sdk/lib/horizon';
 
 export interface ClaimableBalanceParams {
   sourceAccount: StellarSdk.Account;
@@ -83,7 +84,7 @@ export function claimClaimableBalance(params: ClaimBalanceParams): StellarSdk.Tr
 export async function getClaimableBalances(
   server: StellarSdk.Horizon.Server,
   claimantPublicKey: string
-): Promise<StellarSdk.ServerApi.ClaimableBalanceRecord[]> {
+): Promise<ServerApi.ClaimableBalanceRecord[]> {
   const balances = await server
     .claimableBalances()
     .claimant(claimantPublicKey)

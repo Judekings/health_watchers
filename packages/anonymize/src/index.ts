@@ -97,7 +97,7 @@ function stripPIIFromText(text: string, patientName?: string): string {
 }
 
 // Level 1: De-identification - Remove direct identifiers
-function deIdentify(data: PatientData, options: AnonymizationOptions): AnonymizedPatientData {
+function deIdentify(data: PatientData, _options: AnonymizationOptions): AnonymizedPatientData {
   const patientName = data.firstName && data.lastName ? `${data.firstName} ${data.lastName}` : undefined;
   
   return {

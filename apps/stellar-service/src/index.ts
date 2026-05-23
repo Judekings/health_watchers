@@ -26,7 +26,7 @@ import {
   createClaimableBalance as buildCreateClaimableBalance,
   claimClaimableBalance as buildClaimClaimableBalance,
 } from './operations/claimable-balance.js';
-import { Keypair, BASE_FEE, Asset } from '@stellar/stellar-sdk';
+import { Keypair, Asset } from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
 import logger from './logger.js';
 import { stellarConfig } from './config.js';
@@ -73,7 +73,7 @@ const requireSecret = (req: express.Request, res: express.Response, next: expres
 };
 
 // Middleware: Check circuit breaker
-const checkCircuitBreakerMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const checkCircuitBreakerMiddleware = (_req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (!checkCircuitBreaker()) {
     return res.status(503).json({
       error: 'Stellar network unavailable',
@@ -82,7 +82,7 @@ const checkCircuitBreakerMiddleware = (req: express.Request, res: express.Respon
       suggestedAction: 'Retry after 30 seconds',
     });
   }
-  next();
+  return next();
 };
 
 app.use(express.json());
@@ -119,7 +119,7 @@ app.get('/network-status', async (_req, res) => {
 });
 
 // ✅ PUBLIC: GET /health - Health check endpoint
-app.get('/health', async (req, res) => {
+app.get('/health', async (_req, res) => {
   const horizon = await checkHorizon();
   const status = horizon.status === 'healthy' ? 'ok' : 'degraded';
   const cbState = getCircuitBreakerState();
@@ -295,7 +295,7 @@ app.get('/orderbook', async (req, res) => {
 // ✅ PROTECTED: POST /claimable-balance — create escrow claimable balance for insurance pre-auth
 app.post('/claimable-balance', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
   try {
-    const { fromPublicKey, amount, claimantPublicKey, claimableUntil, memo } = req.body;
+    const { fromPublicKey, amount, claimantPublicKey, claimableUntil } = req.body;
     if (!fromPublicKey || !amount || !claimantPublicKey || !claimableUntil) {
       return res.status(400).json({ error: 'fromPublicKey, amount, claimantPublicKey, claimableUntil are required' });
     }
@@ -419,7 +419,7 @@ app.post('/fee-bump', requireSecret, async (req, res) => {
 });
 
 // ✅ PROTECTED: GET /monitor/stream?publicKey=G... — SSE stream of account transactions
-app.get('/monitor/stream', requireSecret, (req, res) => {
+app.get('/monitor/stream', requireSecret, (req, res): any => {
   const { publicKey } = req.query;
 
   if (!publicKey || typeof publicKey !== 'string') {

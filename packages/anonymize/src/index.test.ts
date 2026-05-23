@@ -1,4 +1,4 @@
-import { anonymize, anonymizeBatch, createAuditLog, type PatientData } from './index';
+import { anonymize, anonymizeBatch, createAuditLog, PatientData } from './index';
 
 describe('Anonymization Service', () => {
   const mockPatient: PatientData = {

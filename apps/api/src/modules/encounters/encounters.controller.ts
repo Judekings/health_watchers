@@ -283,7 +283,8 @@ router.post(
         if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
         const ageMonths = (today.getFullYear() - dob.getFullYear()) * 12 + (today.getMonth() - dob.getMonth());
         if (age < 12) ageAlerts.push(`PEDIATRIC_WEIGHT_DOSING: Patient is ${ageMonths} months old — use weight-based dosing calculations.`);
-        if (age >= 65) ageAlerts.push(`ELDERLY_POLYPHARMACY: Patient is ${age} years old — review for polypharmacy risk and renal dosing adjustments.`)       if (age >= 18 && age < 65 && req.body.prescriptions?.length) ageAlerts.push(`STANDARD_ADULT_DOSING: Verify standard adult dosing for patient age ${age}.`);
+        if (age >= 65) ageAlerts.push(`ELDERLY_POLYPHARMACY: Patient is ${age} years old — review for polypharmacy risk and renal dosing adjustments.`);
+        if (age >= 18 && age < 65 && req.body.prescriptions?.length) ageAlerts.push(`STANDARD_ADULT_DOSING: Verify standard adult dosing for patient age ${age}.`);
       }
     }
     const doc = await EncounterModel.create(req.body);
@@ -300,8 +301,6 @@ router.post(
       ...patientContext,
     });
 
-    return res.status(201).json({ 
-      status: 'success', 
     return res.status(201).json({
       status: 'success',
       data: toEncounterResponse(doc),
@@ -497,7 +496,6 @@ router.post(
       data: toEncounterResponse(encounter),
       cdsAlerts: cdsAlerts.length > 0 ? cdsAlerts : undefined,
       ageAlerts: ageAlerts.length > 0 ? ageAlerts : undefined,
-      message: 'Prescription added successfully'
       message: 'Prescription added successfully',
     });
   })
