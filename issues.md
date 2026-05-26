@@ -1,4 +1,4 @@
-### #103 Create the Figma project structure and shared component library
+pu### #103 Create the Figma project structure and shared component library
 
 **Label:** 🎨 design
 **Branch:** `design/figma-project-setup`
