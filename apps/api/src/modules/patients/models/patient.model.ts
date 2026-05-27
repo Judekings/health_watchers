@@ -115,6 +115,16 @@ patientSchema.pre('save', function () {
   }
 });
 
+patientSchema.pre('findOneAndUpdate', function () {
+  const update = this.getUpdate() as Record<string, any> | null;
+  if (!update) return;
+  const target: Record<string, unknown> = (update.$set as Record<string, unknown>) ?? update;
+  for (const field of PHI_FIELDS) {
+    const val = target[field];
+    if (typeof val === 'string') target[field] = encrypt(val);
+  }
+});
+
 function decryptDoc(doc: unknown) {
   if (!doc || typeof doc !== 'object') return;
   const d = doc as Record<string, unknown>;
@@ -146,8 +156,8 @@ patientSchema.virtual('age').get(function () {
 patientSchema.virtual('ageGroup').get(function () {
   const age = (this as any).age;
   if (age === null) return null;
-  if (age < 1)  return 'infant';
-  if (age < 3)  return 'toddler';
+  if (age < 1) return 'infant';
+  if (age < 3) return 'toddler';
   if (age < 12) return 'child';
   if (age < 18) return 'adolescent';
   if (age < 65) return 'adult';
