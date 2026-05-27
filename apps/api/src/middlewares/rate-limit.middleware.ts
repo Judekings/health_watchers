@@ -9,16 +9,23 @@ const makeHandler =
     res.status(429).json(message);
   };
 
-// ── Optional Redis store ──────────────────────────────────────────────────────
-// Falls back to in-memory when REDIS_URL is not set.
+// ── Redis store (required in production for distributed rate limiting) ────────
 async function buildStore() {
   const redisUrl = process.env.REDIS_URL;
-  if (!redisUrl) return undefined; // in-memory fallback
+  const isProd = process.env.NODE_ENV === 'production';
+
+  if (!redisUrl) {
+    if (isProd) {
+      console.warn(
+        '⚠️  [rate-limit] REDIS_URL is not set in production. ' +
+          'Rate limits are per-pod — attackers can bypass auth limits across replicas.'
+      );
+    }
+    return undefined;
+  }
 
   try {
-    // @ts-expect-error -- 'redis' is an optional peer dependency; not installed in all environments
     const { createClient } = await import('redis');
-    // @ts-expect-error -- 'rate-limit-redis' is an optional peer dependency; not installed in all environments
     const { RedisStore } = await import('rate-limit-redis');
     const client = createClient({ url: redisUrl });
     client.on('error', (err: Error) =>
@@ -26,8 +33,13 @@ async function buildStore() {
     );
     await client.connect();
     return new RedisStore({ sendCommand: (...args: string[]) => client.sendCommand(args) });
-  } catch {
-    console.warn('[rate-limit] rate-limit-redis not installed, using in-memory store');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (isProd) {
+      console.warn(`⚠️  [rate-limit] Failed to connect to Redis (${msg}). Using in-memory store.`);
+    } else {
+      console.warn('[rate-limit] Redis unavailable, using in-memory store');
+    }
     return undefined;
   }
 }

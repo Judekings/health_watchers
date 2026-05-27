@@ -52,6 +52,9 @@ api:
     OTEL_SAMPLING_RATE: "0.1"
     # Socket.IO CORS — update to your actual web frontend URL(s)
     WEB_URL: "https://app.healthwatchers.example.com"
+    # Redis — required in production for distributed rate limiting across replicas
+    # For managed Redis (AWS ElastiCache, etc.) update this URL
+    REDIS_URL: "redis://redis:6379"
 
 # ── Web Frontend ──────────────────────────────────────────────────────────────
 web:

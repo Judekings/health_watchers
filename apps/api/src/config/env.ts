@@ -60,6 +60,16 @@ if (!result.success) {
 
 export const env = result.data;
 
+// Warn when REDIS_URL is absent in production — in-memory rate limiting is
+// per-pod and allows brute-force bypass in multi-replica deployments.
+if (process.env.NODE_ENV === 'production' && !env.REDIS_URL) {
+  console.warn(
+    '⚠️  WARNING: REDIS_URL is not set in production. ' +
+      'Rate limiting will be in-memory and NOT shared across instances. ' +
+      'This allows attackers to bypass brute-force protection by distributing requests across pods.'
+  );
+}
+
 // Log non-secret config values at startup
 console.log('✅ Config validated:');
 console.log(`   API_PORT:        ${env.API_PORT}`);
