@@ -16,7 +16,7 @@ const router = Router();
 router.get(
   '/population-health',
   authenticate,
-  requireRoles(['CLINIC_ADMIN', 'DOCTOR']),
+  requireRoles('CLINIC_ADMIN', 'DOCTOR'),
   aiLimiter,
   async (req: Request, res: Response) => {
     try {
@@ -70,7 +70,7 @@ router.get(
 router.post(
   '/population-insights',
   authenticate,
-  requireRoles(['CLINIC_ADMIN']),
+  requireRoles('CLINIC_ADMIN'),
   aiLimiter,
   async (req: Request, res: Response) => {
     try {
@@ -107,7 +107,7 @@ router.post(
 router.get(
   '/population-health/history',
   authenticate,
-  requireRoles(['CLINIC_ADMIN', 'DOCTOR']),
+  requireRoles('CLINIC_ADMIN', 'DOCTOR'),
   async (req: Request, res: Response) => {
     try {
       const clinicId = String(req.user!.clinicId);

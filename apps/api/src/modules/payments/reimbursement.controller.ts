@@ -19,7 +19,9 @@ router.post('/insurance-reimbursement', async (req: Request, res: Response) => {
     const secret = process.env.INSURANCE_WEBHOOK_SECRET;
 
     if (!signature || !secret) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Missing signature or secret' });
+      return res
+        .status(401)
+        .json({ error: 'Unauthorized', message: 'Missing signature or secret' });
     }
 
     const payload = JSON.stringify(req.body);
@@ -27,7 +29,14 @@ router.post('/insurance-reimbursement', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized', message: 'Invalid signature' });
     }
 
-    const { claimId, clinicId, insuranceProvider, approvedAmount, currency, insuranceStellarAddress } = req.body;
+    const {
+      claimId,
+      clinicId,
+      insuranceProvider,
+      approvedAmount,
+      currency,
+      insuranceStellarAddress,
+    } = req.body;
 
     if (!claimId || !clinicId || !approvedAmount || !currency || !insuranceStellarAddress) {
       return res.status(400).json({ error: 'ValidationError', message: 'Missing required fields' });
@@ -50,38 +59,46 @@ router.post('/insurance-reimbursement', async (req: Request, res: Response) => {
 });
 
 // GET /api/v1/payments/reimbursements - List reimbursements
-router.get('/reimbursements', authenticate, requireRoles(['CLINIC_ADMIN', 'SUPER_ADMIN']), async (req: Request, res: Response) => {
-  try {
-    const { status, overdue } = req.query;
-    let query: any = { clinicId: req.user!.clinicId };
+router.get(
+  '/reimbursements',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const { status, overdue } = req.query;
+      let query: any = { clinicId: req.user!.clinicId };
 
-    if (status) {
-      query.reimbursementStatus = status;
+      if (status) {
+        query.reimbursementStatus = status;
+      }
+
+      let reimbursements = await ReimbursementModel.find(query).sort({ createdAt: -1 });
+
+      if (overdue === 'true') {
+        const overdueList = await getOverdueReimbursements(String(req.user!.clinicId));
+        reimbursements = overdueList;
+      }
+
+      const outstanding = await getOutstandingReimbursements(String(req.user!.clinicId));
+      const totalOutstanding = outstanding.reduce(
+        (sum, r) => sum + parseFloat(r.approvedAmount),
+        0
+      );
+
+      res.json({
+        reimbursements,
+        summary: {
+          total: reimbursements.length,
+          outstanding: outstanding.length,
+          totalOutstandingAmount: totalOutstanding,
+        },
+      });
+    } catch (err) {
+      logger.error('Error fetching reimbursements:', err);
+      res.status(500).json({ error: 'InternalServerError' });
     }
-
-    let reimbursements = await ReimbursementModel.find(query).sort({ createdAt: -1 });
-
-    if (overdue === 'true') {
-      const overdueList = await getOverdueReimbursements(String(req.user!.clinicId));
-      reimbursements = overdueList;
-    }
-
-    const outstanding = await getOutstandingReimbursements(String(req.user!.clinicId));
-    const totalOutstanding = outstanding.reduce((sum, r) => sum + parseFloat(r.approvedAmount), 0);
-
-    res.json({
-      reimbursements,
-      summary: {
-        total: reimbursements.length,
-        outstanding: outstanding.length,
-        totalOutstandingAmount: totalOutstanding,
-      },
-    });
-  } catch (err) {
-    logger.error('Error fetching reimbursements:', err);
-    res.status(500).json({ error: 'InternalServerError' });
   }
-});
+);
 
 // GET /api/v1/payments/reimbursements/:claimId - Get reimbursement details
 router.get('/reimbursements/:claimId', authenticate, async (req: Request, res: Response) => {
