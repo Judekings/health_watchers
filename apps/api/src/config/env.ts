@@ -4,6 +4,7 @@
  * Prints a table of missing/invalid vars and exits with code 1 on failure.
  */
 import { z } from 'zod';
+import { redactConnectionString } from '../utils/redact';
 
 const envSchema = z.object({
   MONGO_URI: z
@@ -61,6 +62,6 @@ export const env = result.data;
 // Log non-secret config values at startup
 console.log('✅ Config validated:');
 console.log(`   API_PORT:        ${env.API_PORT}`);
-console.log(`   MONGO_URI:       ${env.MONGO_URI}`);
+console.log(`   MONGO_URI:       ${redactConnectionString(env.MONGO_URI)}`);
 console.log(`   STELLAR_NETWORK: ${env.STELLAR_NETWORK}`);
 console.log(`   LOG_LEVEL:       ${env.LOG_LEVEL}`);
