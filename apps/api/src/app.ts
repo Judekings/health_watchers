@@ -90,6 +90,7 @@ import onboardingRoutes from './modules/clinics/onboarding.routes';
 import peerReviewsRouter from './modules/peer-reviews/peer-reviews.router';
 import { preAuthRoutes } from './modules/pre-auth/pre-auth.controller';
 import federationRouter from './modules/federation/federation.router';
+import exportRouter from './modules/export/export.routes';
 
 
 const app = express();
@@ -258,6 +259,9 @@ app.use('/api/v1/peer-reviews', peerReviewsRouter);
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
 app.use('/.well-known', federationRouter);
 app.use('/federation', federationRouter);
+
+// ── Export routes (HIPAA Right of Access + FHIR) ──────────────────────────────
+app.use('/api/v1', exportRouter);
 
 setupSwagger(app);
 
