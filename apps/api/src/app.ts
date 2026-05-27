@@ -86,6 +86,7 @@ import onboardingRoutes from './modules/clinics/onboarding.routes';
 import peerReviewsRouter from './modules/peer-reviews/peer-reviews.router';
 import { preAuthRoutes } from './modules/pre-auth/pre-auth.controller';
 import federationRouter from './modules/federation/federation.router';
+import { complianceRoutes } from './modules/compliance/compliance.controller';
 
 
 const app = express();
@@ -250,6 +251,7 @@ app.use('/api/v1/cds', cdsRoutes);
 app.use('/api/v1/onboarding', onboardingRoutes);
 app.use('/api/v1/pre-auth', paymentLimiter, preAuthRoutes);
 app.use('/api/v1/peer-reviews', peerReviewsRouter);
+app.use('/api/v1/compliance', complianceRoutes);
 
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
 app.use('/.well-known', federationRouter);
