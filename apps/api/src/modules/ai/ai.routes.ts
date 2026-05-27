@@ -24,6 +24,9 @@ import { assessTriage, addToTriageQueue, getTriageQueue, updateTriageStatus } fr
 
 const router = Router();
 
+// Mount population health routes
+router.use('/', populationHealthRoutes);
+
 // GET /api/v1/ai/health
 router.get('/health', (_req, res) => res.json({ status: 'ok', service: 'ai' }));
 
