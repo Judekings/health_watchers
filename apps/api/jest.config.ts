@@ -59,10 +59,11 @@ const config: Config = {
     ],
   },
 
-  // Coverage: auth + payments modules
+  // Coverage: auth + payments + patient model
   collectCoverageFrom: [
     'src/modules/auth/**/*.ts',
     'src/modules/payments/**/*.ts',
+    'src/modules/patients/models/patient.model.ts',
     '!src/modules/auth/**/*.test.ts',
     '!src/modules/auth/**/*.d.ts',
     '!src/modules/payments/**/*.test.ts',

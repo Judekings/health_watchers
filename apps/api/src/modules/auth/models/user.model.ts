@@ -51,6 +51,14 @@ export interface User {
   lockedUntil?: Date; // brute-force protection
   mustChangePassword?: boolean; // Force password change on next login
   preferences: UserPreferences;
+  stellarPublicKey?: string; // Doctor's personal Stellar wallet for payment splits
+  // Portal MFA fields (for PATIENT role)
+  portalMfaEnabled?: boolean;
+  portalMfaSecret?: string;
+  portalMfaBackupCodes?: string[]; // hashed backup codes
+  portalMfaMethod?: 'totp' | 'sms'; // MFA method preference
+  portalPhoneNumber?: string; // For SMS OTP
+  portalMfaEnabledAt?: Date;
 }
 
 const userSchema = new Schema(
@@ -127,6 +135,36 @@ const userSchema = new Schema(
         large_transaction:        { type: Boolean, default: true },
         unrecognized_transaction: { type: Boolean, default: true },
       },
+    },
+    stellarPublicKey: { type: String, sparse: true, index: true },
+    portalMfaEnabled: { type: Boolean, default: false },
+    portalMfaSecret: {
+      type: String,
+      required: false,
+      select: false,
+      default: undefined,
+    },
+    portalMfaBackupCodes: {
+      type: [String],
+      required: false,
+      select: false,
+      default: undefined,
+    },
+    portalMfaMethod: {
+      type: String,
+      enum: ['totp', 'sms'],
+      required: false,
+      default: undefined,
+    },
+    portalPhoneNumber: {
+      type: String,
+      required: false,
+      default: undefined,
+    },
+    portalMfaEnabledAt: {
+      type: Date,
+      required: false,
+      default: undefined,
     },
   },
   { timestamps: true, versionKey: false }

@@ -19,6 +19,7 @@ import { patientPhotoRoutes } from './modules/patients/photo.controller';
 import { encounterRoutes } from './modules/encounters/encounters.controller';
 import { encounterTemplateRoutes } from './modules/encounters/encounter-templates.controller';
 import paymentsRouter from './modules/payments/payments.routes';
+import { reimbursementRoutes } from './modules/payments/reimbursement.controller';
 import { clinicRoutes } from './modules/clinics/clinics.controller';
 import { webhookRoutes } from './modules/webhooks/webhooks.controller';
 import { auditLogRoutes } from './modules/audit/audit-logs.controller';
@@ -91,6 +92,7 @@ import peerReviewsRouter from './modules/peer-reviews/peer-reviews.router';
 import { preAuthRoutes } from './modules/pre-auth/pre-auth.controller';
 import federationRouter from './modules/federation/federation.router';
 import exportRouter from './modules/export/export.routes';
+import { complianceRoutes } from './modules/compliance/compliance.controller';
 
 
 const app = express();
@@ -231,6 +233,7 @@ app.use('/api/v1/patients', patientPhotoRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/encounter-templates', encounterTemplateRoutes);
 app.use('/api/v1/payments', paymentLimiter, paymentsRouter);
+app.use('/api/v1/payments', reimbursementRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
 app.use('/api/v1/audit', auditRoutes);
@@ -255,6 +258,7 @@ app.use('/api/v1/cds', cdsRoutes);
 app.use('/api/v1/onboarding', onboardingRoutes);
 app.use('/api/v1/pre-auth', paymentLimiter, preAuthRoutes);
 app.use('/api/v1/peer-reviews', peerReviewsRouter);
+app.use('/api/v1/compliance', complianceRoutes);
 
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
 app.use('/.well-known', federationRouter);
