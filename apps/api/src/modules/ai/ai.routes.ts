@@ -19,8 +19,12 @@ import {
   dosageCalculatorRequestSchema,
   DosageCalculatorRequestDto,
 } from './ai.validation';
+import { populationHealthRoutes } from './population-health.controller';
 
 const router = Router();
+
+// Mount population health routes
+router.use('/', populationHealthRoutes);
 
 // GET /api/v1/ai/health
 router.get('/health', (_req, res) => res.json({ status: 'ok', service: 'ai' }));
