@@ -1,65 +1,493 @@
-import { config } from "@health-watchers/config";
-import Server from "@stellar/stellar-sdk"; // Default import for v12+
-import { Keypair, TransactionBuilder, Operation, Asset, BASE_FEE } from "@stellar/stellar-sdk";
-import express, { Request, Response } from "express";
-import fetch from "node-fetch";
+// apps/stellar-service/src/index.ts
 
-const horizon: Server = new Server(config.stellarHorizonUrl);
+import './tracing'; // must be first — initialises OpenTelemetry SDK
+import crypto from 'crypto';
+import express from 'express';
+import { Server } from 'http';
+import pinoHttp from 'pino-http';
+import {
+  fundAccount,
+  createIntent,
+  verifyIntent,
+  getAccountBalance,
+  createUsdcTrustline,
+  findPaths,
+  getOrderbook,
+  checkHorizon,
+  getFeeStats,
+  buildFeeBumpTransaction,
+  issueRefund,
+  streamAccountTransactions,
+  getNetworkStatus,
+  getHorizonServer,
+  getNetworkPassphrase,
+} from './stellar.js';
+import {
+  createClaimableBalance as buildCreateClaimableBalance,
+  claimClaimableBalance as buildClaimClaimableBalance,
+} from './operations/claimable-balance.js';
+import { Keypair, Asset } from '@stellar/stellar-sdk';
+import dotenv from 'dotenv';
+import logger from './logger.js';
+import { stellarConfig } from './config.js';
+import { assertMainnetSafety } from './guards.js';
+import {
+  parseHorizonError,
+  retryWithBackoff,
+  checkCircuitBreaker,
+  recordSuccess,
+  recordFailure,
+  getCircuitBreakerState,
+} from './error-handler.js';
+import { metricsMiddleware, metricsHandler } from './metrics.js';
+
+dotenv.config();
+
+// Run startup validation
+assertMainnetSafety();
+
 const app = express();
+const PORT = process.env.STELLAR_PORT || 3002;
+const SHARED_SECRET = process.env.STELLAR_SERVICE_SECRET;
+
+if (!SHARED_SECRET) {
+  logger.error('STELLAR_SERVICE_SECRET required');
+  process.exit(1);
+}
+
+// Middleware: Validate Shared Secret (ONLY for mutating endpoints)
+const requireSecret = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing Authorization header' });
+  }
+
+  const token = authHeader.substring(7); // Remove "Bearer "
+
+  if (token !== SHARED_SECRET) {
+    return res.status(401).json({ error: 'Invalid secret' });
+  }
+
+  return next();
+};
+
+// Middleware: Check circuit breaker
+const checkCircuitBreakerMiddleware = (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!checkCircuitBreaker()) {
+    return res.status(503).json({
+      error: 'Stellar network unavailable',
+      message: 'Circuit breaker is open due to repeated failures',
+      retryable: true,
+      suggestedAction: 'Retry after 30 seconds',
+    });
+  }
+  return next();
+};
+
 app.use(express.json());
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
+    redact: ['req.headers.authorization'],
+  })
+);
+app.use(metricsMiddleware);
 
-app.post("/fund", async (req: Request, res: Response) => {
-  const { publicKey } = req.body;
-  if (!publicKey) return res.status(400).json({ error: "publicKey required" });
+// ✅ PUBLIC: GET /metrics — Prometheus metrics
+app.get('/metrics', metricsHandler);
+
+// ✅ PUBLIC: GET /network - Network status endpoint
+app.get('/network', (_req, res) => {
+  return res.json({
+    network: stellarConfig.network,
+    platformPublicKey: stellarConfig.platformPublicKey,
+    mainnetMode: stellarConfig.network === 'mainnet',
+    dryRun: stellarConfig.dryRun,
+  });
+});
+
+// ✅ PUBLIC: GET /network-status - Detailed network status with failover info
+app.get('/network-status', async (_req, res) => {
   try {
-    const response = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
-    const data = await response.json();
-    res.json({ success: true, data });
-  } catch (error: unknown) {
-    const err = error as Error;
-    res.status(500).json({ error: err.message });
+    const status = await getNetworkStatus();
+    return res.json({ success: true, ...status });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
   }
 });
 
-app.post("/intent", async (req: Request, res: Response) => {
-  const { fromSecret, toPublic, amount, assetCode = "XLM", issuer } = req.body;
-  if (!fromSecret || !toPublic || !amount) return res.status(400).json({ error: "fromSecret, toPublic, amount required" });
+// ✅ PUBLIC: GET /health - Health check endpoint
+app.get('/health', async (_req, res) => {
+  const horizon = await checkHorizon();
+  const status = horizon.status === 'healthy' ? 'ok' : 'degraded';
+  const cbState = getCircuitBreakerState();
   
+  return res.json({
+    status,
+    network: stellarConfig.network,
+    horizonUrl: stellarConfig.horizonUrl,
+    horizonStatus: horizon.status,
+    horizonLatency: horizon.latency,
+    circuitBreaker: cbState,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// ✅ PROTECTED: POST /fund (requires secret, testnet only)
+app.post('/fund', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  // Return 403 on mainnet - Friendbot is testnet-only
+  if (stellarConfig.network === 'mainnet') {
+    return res.status(403).json({ 
+      error: 'Forbidden', 
+      message: 'Friendbot funding is not available on mainnet' 
+    });
+  }
+
   try {
-    const fromKeypair = Keypair.fromSecret(fromSecret);
-    const account = await horizon.loadAccount(fromKeypair.publicKey());
-    const asset = issuer ? new Asset(assetCode, issuer) : Asset.native();
-    
-    const tx = new TransactionBuilder(account, {
-      fee: BASE_FEE.toString(),
-      networkPassphrase: config.stellarNetwork === "mainnet" ? "Public Global Stellar Network ; September 2015" : "Test SDF Network ; September 2015",
-    })
-      .addOperation(Operation.payment({ destination: toPublic, asset, amount: amount.toString() }))
-      .setTimeout(30)
-      .build();
-    
-    tx.sign(fromKeypair);
-    const result = await horizon.submitTransaction(tx);
-    res.json({ success: true, transactionHash: result.hash });
-  } catch (error: unknown) {
-    const err = error as Error;
-    res.status(500).json({ error: err.message });
+    const { publicKey, amount } = req.body;
+    const result = await retryWithBackoff(() => fundAccount(publicKey, amount), 3, 1000);
+    recordSuccess();
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
   }
 });
 
-app.get("/verify/:hash", async (req: Request, res: Response) => {
-  const { hash } = req.params;
+// ✅ PROTECTED: POST /intent (requires secret)
+app.post('/intent', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
   try {
-    const tx = await horizon.loadTransaction(hash);
-    res.json({ success: true, transaction: tx });
-  } catch (error: unknown) {
-    const err = error as Error;
-    res.status(404).json({ error: "Transaction not found: " + err.message });
+    const { fromPublicKey, toPublicKey, amount } = req.body;
+    const result = await retryWithBackoff(() => createIntent(fromPublicKey, toPublicKey, amount), 3, 1000);
+    recordSuccess();
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
   }
 });
 
-const port = process.env.STELLAR_PORT || 3002;
-app.listen(Number(port), () => {
-  console.log(`Health Watchers Stellar Service on port ${port}, network: ${config.stellarNetwork}`);
+// ✅ PROTECTED: POST /refund (requires secret)
+app.post('/refund', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { toPublicKey, amount, memo } = req.body;
+    if (!toPublicKey || !amount) {
+      return res.status(400).json({ error: 'toPublicKey and amount are required' });
+    }
+    const result = await retryWithBackoff(() => issueRefund(toPublicKey, amount, memo || 'refund'), 3, 1000);
+    recordSuccess();
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
 });
 
+// ✅ PUBLIC: GET /fee-stats (no auth needed)
+app.get('/fee-stats', checkCircuitBreakerMiddleware, async (_req, res) => {
+  try {
+    const stats = await retryWithBackoff(() => getFeeStats(), 3, 1000);
+    recordSuccess();
+    res.json({ success: true, ...stats });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PUBLIC: GET /verify/:hash (no auth needed)
+app.get('/verify/:hash', checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { hash } = req.params;
+    const result = await retryWithBackoff(() => verifyIntent(hash), 3, 1000);
+    recordSuccess();
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PROTECTED: GET /balance/:publicKey (requires secret)
+app.get('/balance/:publicKey', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { publicKey } = req.params;
+    const result = await retryWithBackoff(() => getAccountBalance(publicKey), 3, 1000);
+    recordSuccess();
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PROTECTED: POST /trustline/usdc (requires secret)
+app.post('/trustline/usdc', requireSecret, async (req, res) => {
+  try {
+    const { publicKey, usdcIssuer } = req.body;
+    if (!publicKey || !usdcIssuer) {
+      return res.status(400).json({ error: 'publicKey and usdcIssuer are required' });
+    }
+    const result = await createUsdcTrustline(publicKey, usdcIssuer);
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /paths (requires secret)
+app.get('/paths', requireSecret, async (req, res) => {
+  try {
+    const { 
+      sourceAssetCode, 
+      sourceAssetIssuer, 
+      destinationAssetCode, 
+      destinationAssetIssuer, 
+      destinationAmount 
+    } = req.query;
+
+    if (!sourceAssetCode || !destinationAssetCode || !destinationAmount) {
+      return res.status(400).json({ error: 'Missing required query parameters' });
+    }
+
+    const result = await findPaths(
+      sourceAssetCode as string,
+      sourceAssetIssuer as string,
+      destinationAssetCode as string,
+      destinationAssetIssuer as string,
+      destinationAmount as string
+    );
+    return res.json({ success: true, data: result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /orderbook (no auth needed)
+app.get('/orderbook', async (req, res) => {
+  try {
+    const { baseAssetCode, baseAssetIssuer, counterAssetCode, counterAssetIssuer } = req.query;
+
+    if (!baseAssetCode || !counterAssetCode) {
+      return res.status(400).json({ error: 'Missing required query parameters' });
+    }
+
+    const result = await getOrderbook(
+      baseAssetCode as string,
+      baseAssetIssuer as string,
+      counterAssetCode as string,
+      counterAssetIssuer as string
+    );
+    return res.json({ success: true, data: result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /claimable-balance — create escrow claimable balance for insurance pre-auth
+app.post('/claimable-balance', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { fromPublicKey, amount, claimantPublicKey, claimableUntil } = req.body;
+    if (!fromPublicKey || !amount || !claimantPublicKey || !claimableUntil) {
+      return res.status(400).json({ error: 'fromPublicKey, amount, claimantPublicKey, claimableUntil are required' });
+    }
+
+    const server = getHorizonServer();
+    const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const sourceAccount = await server.loadAccount(fromPublicKey);
+    const fee = await server.fetchBaseFee();
+
+    const claimableAfter = new Date(); // claimable immediately
+    const claimableUntilDate = new Date(claimableUntil);
+
+    const tx = buildCreateClaimableBalance({
+      sourceAccount,
+      amount,
+      asset: Asset.native(),
+      claimantPublicKey,
+      claimableAfter,
+      claimableUntil: claimableUntilDate,
+      networkPassphrase: getNetworkPassphrase(),
+      baseFee: String(fee),
+    });
+
+    tx.sign(platformKeypair);
+
+    if (stellarConfig.dryRun) {
+      const balanceId = `dry-run-balance-${Date.now()}`;
+      return res.json({ success: true, balanceId, dryRun: true });
+    }
+
+    const result = await server.submitTransaction(tx);
+    // Extract balance ID from the transaction result
+    const balanceId = (result as any).id ?? `balance-${result.hash}`;
+    recordSuccess();
+    return res.json({ success: true, balanceId, txHash: result.hash });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PROTECTED: POST /claimable-balance/:balanceId/claim — clinic claims the escrowed funds
+app.post('/claimable-balance/:balanceId/claim', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { balanceId } = req.params;
+    const server = getHorizonServer();
+    const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const claimerAccount = await server.loadAccount(platformKeypair.publicKey());
+    const fee = await server.fetchBaseFee();
+
+    const tx = buildClaimClaimableBalance({
+      claimerAccount,
+      balanceId: decodeURIComponent(balanceId),
+      networkPassphrase: getNetworkPassphrase(),
+      baseFee: String(fee),
+    });
+
+    tx.sign(platformKeypair);
+
+    if (stellarConfig.dryRun) {
+      return res.json({ success: true, txHash: `dry-run-claim-${Date.now()}`, dryRun: true });
+    }
+
+    const result = await server.submitTransaction(tx);
+    recordSuccess();
+    return res.json({ success: true, txHash: result.hash });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PROTECTED: POST /claimable-balance/:balanceId/reclaim — patient reclaims after denial
+app.post('/claimable-balance/:balanceId/reclaim', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { balanceId } = req.params;
+    const server = getHorizonServer();
+    const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const claimerAccount = await server.loadAccount(platformKeypair.publicKey());
+    const fee = await server.fetchBaseFee();
+
+    // Reclaim uses the same ClaimClaimableBalance operation but signed by the platform
+    // acting on behalf of the patient (or the patient's key if available)
+    const tx = buildClaimClaimableBalance({
+      claimerAccount,
+      balanceId: decodeURIComponent(balanceId),
+      networkPassphrase: getNetworkPassphrase(),
+      baseFee: String(fee),
+    });
+
+    tx.sign(platformKeypair);
+
+    if (stellarConfig.dryRun) {
+      return res.json({ success: true, txHash: `dry-run-reclaim-${Date.now()}`, dryRun: true });
+    }
+
+    const result = await server.submitTransaction(tx);
+    recordSuccess();
+    return res.json({ success: true, txHash: result.hash });
+  } catch (error: any) {
+    recordFailure();
+    const horizonError = parseHorizonError(error);
+    return res.status(horizonError.statusCode).json(horizonError);
+  }
+});
+
+// ✅ PROTECTED: POST /fee-bump — wrap inner XDR in a platform-sponsored fee bump tx
+app.post('/fee-bump', requireSecret, async (req, res) => {
+  try {
+    const { innerXdr } = req.body;
+    if (!innerXdr) {
+      return res.status(400).json({ error: 'innerXdr is required' });
+    }
+    const result = await buildFeeBumpTransaction(innerXdr);
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /monitor/stream?publicKey=G... — SSE stream of account transactions
+app.get('/monitor/stream', requireSecret, (req, res): any => {
+  const { publicKey } = req.query;
+
+  if (!publicKey || typeof publicKey !== 'string') {
+    return res.status(400).json({ error: 'publicKey query parameter is required' });
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const close = streamAccountTransactions(
+    publicKey,
+    (tx) => {
+      res.write(`data: ${JSON.stringify(tx)}\n\n`);
+    },
+    (err) => {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: String(err) })}\n\n`);
+    }
+  );
+
+  req.on('close', () => {
+    close();
+    logger.info({ publicKey }, 'SSE client disconnected, stream closed');
+  });
+});
+
+const server: Server = app.listen(PORT, () => {
+  logger.info({ 
+    port: PORT, 
+    network: stellarConfig.network,
+    mainnetMode: stellarConfig.network === 'mainnet',
+    secret: SHARED_SECRET ? 'SET' : 'MISSING' 
+  }, 'Stellar Service running');
+});
+
+// Graceful shutdown handler
+const shutdown = async (signal: string) => {
+  logger.info(`${signal} received, starting graceful shutdown`);
+
+  // Stop accepting new connections
+  server.close(() => {
+    logger.info('HTTP server closed');
+    logger.info('Graceful shutdown completed');
+    process.exit(0);
+  });
+
+  // Force exit after 30 seconds if graceful shutdown hangs
+  setTimeout(() => {
+    logger.error('Graceful shutdown timeout (30s), forcing exit');
+    process.exit(1);
+  }, 30000);
+};
+
+// Handle termination signals
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err: unknown) => {
+  logger.error({ err }, 'Uncaught exception');
+  shutdown('uncaughtException');
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason: unknown) => {
+  logger.error({ reason }, 'Unhandled rejection');
+  // Log but don't exit - let the process continue
+});
+
+export default server;

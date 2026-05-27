@@ -1,0 +1,160 @@
+version: '3.8'
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: health-watchers-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4318:4318"    # OTLP HTTP receiver
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: health-watchers-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    environment:
+      METRICS_USERNAME: ${METRICS_USERNAME:-admin}
+      METRICS_PASSWORD: ${METRICS_PASSWORD:-metrics_secret}
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: health-watchers-grafana
+    restart: unless-stopped
+    ports:
+      - "3003:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3003
+    depends_on:
+      - prometheus
+
+  mongodb:
+    image: mongo:7.0
+    container_name: health-watchers-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: health_watchers
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/health_watchers --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: health-watchers-api
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      API_PORT: 3001
+      MONGO_URI: mongodb://admin:password123@mongodb:27017/health_watchers?authSource=admin
+      JWT_ACCESS_TOKEN_SECRET: dev-access-token-secret-change-in-production
+      JWT_REFRESH_TOKEN_SECRET: dev-refresh-token-secret-change-in-production
+      STELLAR_NETWORK: testnet
+      STELLAR_SECRET_KEY: ${STELLAR_SECRET_KEY:-}
+      STELLAR_PUBLIC_KEY: ${STELLAR_PUBLIC_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LOG_LEVEL: info
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SAMPLING_RATE: "1.0"
+      METRICS_USERNAME: ${METRICS_USERNAME:-admin}
+      METRICS_PASSWORD: ${METRICS_PASSWORD:-metrics_secret}
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./apps/api:/app/apps/api
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    command: npm run dev --workspace=api
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: health-watchers-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_STELLAR_NETWORK: testnet
+      NEXT_TELEMETRY_DISABLED: 1
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/web:/app/apps/web
+      - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
+    command: npm run dev --workspace=web
+
+  stellar-service:
+    build:
+      context: .
+      dockerfile: apps/stellar-service/Dockerfile
+    container_name: health-watchers-stellar
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      STELLAR_NETWORK: testnet
+      STELLAR_SECRET_KEY: ${STELLAR_SECRET_KEY:-}
+      STELLAR_PUBLIC_KEY: ${STELLAR_PUBLIC_KEY:-}
+      LOG_LEVEL: info
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SAMPLING_RATE: "1.0"
+      METRICS_USERNAME: ${METRICS_USERNAME:-admin}
+      METRICS_PASSWORD: ${METRICS_PASSWORD:-metrics_secret}
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./apps/stellar-service:/app/apps/stellar-service
+      - /app/node_modules
+      - /app/apps/stellar-service/node_modules
+    command: npm run dev --workspace=stellar-service
+
+volumes:
+  mongodb_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  default:
+    name: health-watchers-network

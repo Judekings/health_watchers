@@ -1,34 +1,26 @@
-import { RequestHandler } from 'express';
-import { verifyAccessToken } from '../modules/auth/token.service';
+import { Request, Response, NextFunction } from 'express';
+import { AppRole } from '@health-watchers/types';
 
-export enum Roles {
-  SUPER_ADMIN  = 'SUPER_ADMIN',
-  CLINIC_ADMIN = 'CLINIC_ADMIN',
-  DOCTOR       = 'DOCTOR',
-  NURSE        = 'NURSE',
-  ASSISTANT    = 'ASSISTANT',
-  READ_ONLY    = 'READ_ONLY',
-}
-
-const ROLE_SET = new Set(Object.values(Roles));
-
-const getBearerToken = (auth: unknown): string | null => {
-  if (typeof auth !== 'string') return null;
-  const [scheme, token] = auth.split(' ');
-  return scheme === 'Bearer' && token ? token : null;
+export const Roles = {
+  PATIENT: 'PATIENT' as AppRole,
+  READ_ONLY: 'READ_ONLY' as AppRole,
+  ASSISTANT: 'ASSISTANT' as AppRole,
+  NURSE: 'NURSE' as AppRole,
+  DOCTOR: 'DOCTOR' as AppRole,
+  CLINIC_ADMIN: 'CLINIC_ADMIN' as AppRole,
+  SUPER_ADMIN: 'SUPER_ADMIN' as AppRole,
 };
 
-export const authorize = (allowedRoles: Roles[]): RequestHandler => (req, res, next) => {
-  const token = getBearerToken(req.headers.authorization);
-  if (!token) return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
-
-  const user = verifyAccessToken(token);
-  if (!user || !ROLE_SET.has(user.role as Roles))
-    return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired token' });
-
-  req.user = user;
-  if (!allowedRoles.includes(user.role as Roles))
-    return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
-
-  return next();
+export const authorize = (allowedRoles: AppRole[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    return next();
+  };
 };
