@@ -80,6 +80,32 @@ export const aiRequestsTotal = new client.Counter({
   registers: [register],
 });
 
+// ── Payment Expiration Job Metrics ────────────────────────────────────────────
+
+export const paymentExpirationJobErrorsTotal = new client.Counter({
+  name: 'payment_expiration_job_errors_total',
+  help: 'Total number of payment expiration job execution failures',
+  registers: [register],
+});
+
+export const paymentExpirationJobLastRunExpired = new client.Gauge({
+  name: 'payment_expiration_job_last_run_expired',
+  help: 'Number of payments expired in the most recent successful job run',
+  registers: [register],
+});
+
+export const paymentExpirationJobLastSuccessTimestamp = new client.Gauge({
+  name: 'payment_expiration_job_last_success_timestamp_seconds',
+  help: 'Unix timestamp (seconds) of the last successful payment expiration job run',
+  registers: [register],
+});
+
+export const paymentExpirationJobConsecutiveFailures = new client.Gauge({
+  name: 'payment_expiration_job_consecutive_failures',
+  help: 'Number of consecutive payment expiration job failures since last success',
+  registers: [register],
+});
+
 // ── System Metrics ────────────────────────────────────────────────────────────
 
 export const mongodbConnectionPoolSize = new client.Gauge({
