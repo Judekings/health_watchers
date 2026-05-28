@@ -45,6 +45,11 @@ const options: swaggerJsdoc.Options = {
             patientId: { type: 'string', nullable: true },
             createdAt: { type: 'string', format: 'date-time' },
             confirmedAt: { type: 'string', format: 'date-time', nullable: true },
+            claimableBalanceId: { type: 'string', nullable: true },
+            claimableAfter: { type: 'string', format: 'date-time', nullable: true },
+            claimableUntil: { type: 'string', format: 'date-time', nullable: true },
+            claimed: { type: 'boolean', nullable: true },
+            claimableExpiryNotificationSent: { type: 'boolean', default: false },
           },
         },
         CreatePaymentIntentRequest: {
