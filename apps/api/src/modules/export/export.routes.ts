@@ -10,6 +10,7 @@ import {
   buildClinicRecord,
   sendClinicZip,
 } from './export.service';
+import { buildFhirBundle } from './fhir-mapper';
 
 /** Roles considered "authorized staff" for cross-patient access within a clinic */
 const STAFF_ROLES = ['SUPER_ADMIN', 'CLINIC_ADMIN', 'DOCTOR', 'NURSE', 'ASSISTANT'] as const;
@@ -124,3 +125,65 @@ router.get(
 );
 
 export default router;
+
+/**
+ * @swagger
+ * /patients/{id}/fhir:
+ *   get:
+ *     summary: Export patient data as a FHIR R4 Bundle
+ *     description: Returns a FHIR R4 collection Bundle containing Patient, Encounter, Condition, Observation, and MedicationRequest resources. Requires DOCTOR, CLINIC_ADMIN, or SUPER_ADMIN role.
+ *     tags: [Export]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: FHIR R4 Bundle
+ *         content:
+ *           application/fhir+json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 resourceType: { type: string, example: Bundle }
+ *                 type: { type: string, example: collection }
+ *                 total: { type: integer }
+ *                 entry: { type: array, items: { type: object } }
+ *       400:
+ *         description: Invalid patient ID
+ *       403:
+ *         description: Insufficient permissions
+ *       404:
+ *         description: Patient not found
+ */
+router.get(
+  '/patients/:id/fhir',
+  authenticate,
+  requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN'),
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (!Types.ObjectId.isValid(id))
+      return res.status(400).json({ error: 'BadRequest', message: 'Invalid patient ID format' });
+
+    try {
+      const record = await buildPatientRecord(id);
+      if (!record) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+      auditLog(
+        { action: 'EXPORT_PATIENT_DATA', resourceType: 'Patient', resourceId: id, userId: req.user!.userId, clinicId: req.user!.clinicId },
+        req
+      ).catch((err) => logger.error({ err }, 'Audit log failed for FHIR export'));
+
+      const bundle = buildFhirBundle(record.patient, record.encounters);
+      res.setHeader('Content-Type', 'application/fhir+json');
+      return res.json(bundle);
+    } catch (err: any) {
+      logger.error({ err }, 'FHIR export error');
+      return res.status(500).json({ error: 'InternalError', message: 'FHIR export failed' });
+    }
+  }
+);
