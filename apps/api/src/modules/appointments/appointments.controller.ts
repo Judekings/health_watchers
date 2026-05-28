@@ -11,8 +11,10 @@ import {
   availabilityQuerySchema,
   appointmentIdParamsSchema,
   doctorIdParamsSchema,
+  videoStartSchema,
 } from './appointments.validation';
 import { notifyNextOnWaitlist } from './waitlist.service';
+import { emitToUser } from '@api/realtime/socket';
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
@@ -296,6 +298,7 @@ appointmentRoutes.post(
         {
           isTelemedicine: true,
           videoRoomId: videoRoom.roomId,
+          videoRoomUrl: videoRoom.roomUrl,
           videoProvider: videoRoom.provider,
         },
         { new: true },
@@ -343,10 +346,10 @@ appointmentRoutes.get(
   },
 );
 
-// ── POST /appointments/:id/video-start (mark video session started) ────────────
+// ── POST /appointments/:id/video/start ────────────────────────────────────────
 appointmentRoutes.post(
-  '/:id/video-start',
-  validateRequest({ params: appointmentIdParamsSchema }),
+  '/:id/video/start',
+  validateRequest({ params: appointmentIdParamsSchema, body: videoStartSchema }),
   async (req: Request, res: Response) => {
     try {
       const { clinicId } = req.user!;
@@ -354,11 +357,26 @@ appointmentRoutes.post(
       if (!appointment)
         return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
 
+      if (!appointment.isTelemedicine || !appointment.videoRoomId)
+        return res.status(400).json({ error: 'BadRequest', message: 'Video room not created for this appointment' });
+
+      const { recordingConsent } = req.body;
+
       const updated = await AppointmentModel.findByIdAndUpdate(
         req.params.id,
-        { videoStartedAt: new Date() },
+        { videoStartedAt: new Date(), recordingConsent: !!recordingConsent },
         { new: true },
       ).lean();
+
+      // Emit Socket.IO event to both doctor and patient
+      const payload = {
+        appointmentId: req.params.id,
+        videoRoomId: appointment.videoRoomId,
+        videoRoomUrl: appointment.videoRoomUrl,
+        recordingConsent: !!recordingConsent,
+      };
+      emitToUser(String(appointment.doctorId), 'appointment:video_started', payload);
+      emitToUser(String(appointment.patientId), 'appointment:video_started', payload);
 
       return res.json({ status: 'success', data: updated });
     } catch (err: any) {
@@ -367,9 +385,9 @@ appointmentRoutes.post(
   },
 );
 
-// ── POST /appointments/:id/video-end (mark video session ended, create encounter) ──
+// ── POST /appointments/:id/video/end ──────────────────────────────────────────
 appointmentRoutes.post(
-  '/:id/video-end',
+  '/:id/video/end',
   validateRequest({ params: appointmentIdParamsSchema }),
   async (req: Request, res: Response) => {
     try {
@@ -385,16 +403,16 @@ appointmentRoutes.post(
       const videoEndedAt = new Date();
       const videoDuration = calculateVideoDuration(appointment.videoStartedAt, videoEndedAt);
 
-      // Update appointment with video end time
       const updated = await AppointmentModel.findByIdAndUpdate(
         req.params.id,
-        {
-          videoEndedAt,
-          videoDuration,
-          status: 'completed',
-        },
+        { videoEndedAt, videoDuration, status: 'completed' },
         { new: true },
       ).lean();
+
+      // Emit Socket.IO event to both parties
+      const payload = { appointmentId: req.params.id, videoDuration };
+      emitToUser(String(appointment.doctorId), 'appointment:video_ended', payload);
+      emitToUser(String(appointment.patientId), 'appointment:video_ended', payload);
 
       // Create encounter from video session
       const { EncounterModel } = await import('../encounters/encounter.model');
@@ -409,16 +427,9 @@ appointmentRoutes.post(
         createdBy: userId,
       });
 
-      // Link encounter to appointment
       await AppointmentModel.findByIdAndUpdate(req.params.id, { encounterId: encounter._id });
 
-      return res.json({
-        status: 'success',
-        data: {
-          appointment: updated,
-          encounter,
-        },
-      });
+      return res.json({ status: 'success', data: { appointment: updated, encounter } });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
     }
