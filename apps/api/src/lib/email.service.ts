@@ -342,3 +342,29 @@ export function sendOutcomeNotificationEmail(
   `;
   enqueue(to, `Referral Outcome Recorded — Health Watchers`, text, html);
 }
+
+/** Claimable balance expiry notification sent to patient */
+export function sendClaimableExpiryEmail(
+  to: string,
+  patientName: string,
+  amount: string,
+  claimableUntil: Date
+): void {
+  const portalUrl = `${APP_BASE_URL()}/portal/payments`;
+  const expiryStr = claimableUntil.toLocaleString('en-US', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC';
+  const text = `Your claimable payment of ${amount} XLM is expiring soon (${expiryStr}). Please claim it before it expires or the funds will be returned to the clinic.\n\nClaim now: ${portalUrl}`;
+  const html = `
+    <h3>⏰ Claimable Payment Expiring Soon</h3>
+    <p>Hello <strong>${patientName}</strong>,</p>
+    <p>You have a claimable payment that is expiring within 24 hours. Please claim it before it expires.</p>
+    <table style="border-collapse:collapse;width:100%;margin:16px 0">
+      <tr><td style="padding:8px;font-weight:bold">Amount</td><td style="padding:8px">${amount} XLM</td></tr>
+      <tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Expires At</td><td style="padding:8px;color:#dc2626">${expiryStr}</td></tr>
+    </table>
+    <p>If you do not claim this payment before the expiry date, the funds will be returned to the clinic.</p>
+    <p><a href="${portalUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Claim Payment Now</a></p>
+    <hr style="margin-top:32px">
+    <small style="color:#6b7280">Health Watchers</small>
+  `;
+  enqueue(to, '⏰ Your Claimable Payment is Expiring Soon — Health Watchers', text, html);
+}

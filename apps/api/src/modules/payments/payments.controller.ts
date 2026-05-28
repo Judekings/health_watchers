@@ -11,6 +11,7 @@ import {
   ListPaymentsQuery,
 } from './payments.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
+import { authorize } from '@api/middlewares/rbac.middleware';
 import { toPaymentResponse } from './payments.transformer';
 import { stellarClient } from './services/stellar-client';
 import logger from '@api/utils/logger';
@@ -1868,6 +1869,58 @@ router.get(
     } catch (err: any) {
       return res.status(400).json({ error: 'Error', message: err.message });
     }
+  })
+);
+
+/**
+ * @swagger
+ * /payments/expiring-claimable:
+ *   get:
+ *     summary: List claimable balances expiring within 24 hours
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of expiring claimable balances for the clinic
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       intentId: { type: string }
+ *                       claimableBalanceId: { type: string }
+ *                       amount: { type: string }
+ *                       patientId: { type: string }
+ *                       claimableUntil: { type: string, format: date-time }
+ *                       claimableExpiryNotificationSent: { type: boolean }
+ *       403:
+ *         description: Forbidden — CLINIC_ADMIN only
+ */
+// GET /payments/expiring-claimable — list claimable balances expiring within 24h (CLINIC_ADMIN)
+router.get(
+  '/expiring-claimable',
+  authorize(['CLINIC_ADMIN', 'SUPER_ADMIN']),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { clinicId } = req.user!;
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const records = await PaymentRecordModel.find({
+      clinicId,
+      claimableUntil: { $gte: now, $lte: in24h },
+      claimed: { $ne: true },
+    })
+      .select('intentId claimableBalanceId amount patientId claimableUntil claimableExpiryNotificationSent')
+      .lean();
+
+    return res.json({ status: 'success', data: records });
   })
 );
 

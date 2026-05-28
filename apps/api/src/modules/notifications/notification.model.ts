@@ -13,6 +13,7 @@ export const NOTIFICATION_TYPES = [
   'large_transaction',
   'unrecognized_transaction',
   'waitlist_available',
+  'claimable_expiring',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
