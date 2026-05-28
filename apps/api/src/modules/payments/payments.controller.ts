@@ -1067,4 +1067,116 @@ router.get(
   })
 );
 
+// ── Multi-Signature Payment Endpoints ──────────────────────────────────────────
+
+// POST /payments/multisig — create a multi-signature payment request
+router.post(
+  '/multisig',
+  validateRequest({ body: createPaymentIntentSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { amount, currency, description, requiredSignatures, signers } = req.body;
+    const clinicId = req.user!.clinicId;
+
+    if (!requiredSignatures || !signers || signers.length < 2) {
+      return res.status(400).json({
+        error: 'ValidationError',
+        message: 'requiredSignatures and at least 2 signers are required',
+      });
+    }
+
+    try {
+      const { multiSigPaymentService } = await import('./services/multisig-payment.service');
+      const { payment, multiSigPayment } = await multiSigPaymentService.createMultiSigPaymentRequest({
+        paymentId: undefined as any,
+        clinicId,
+        amount,
+        currency,
+        requiredSignatures,
+        signers,
+        description,
+      });
+
+      paymentsInitiatedTotal.inc({ currency });
+
+      return res.status(201).json({
+        status: 'success',
+        data: {
+          payment,
+          multiSigPayment,
+          signatureProgress: {
+            collected: 0,
+            required: requiredSignatures,
+            complete: false,
+          },
+        },
+      });
+    } catch (err: any) {
+      return res.status(400).json({ error: 'PaymentError', message: err.message });
+    }
+  })
+);
+
+// POST /payments/multisig/:paymentId/sign — add a signature to a multi-sig payment
+router.post(
+  '/multisig/:paymentId/sign',
+  validateRequest({ body: { type: 'object', properties: { signer: { type: 'string' }, signature: { type: 'string' } }, required: ['signer', 'signature'] } as any }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { paymentId } = req.params;
+    const { signer, signature } = req.body;
+
+    try {
+      const { multiSigPaymentService } = await import('./services/multisig-payment.service');
+      const multiSigPayment = await multiSigPaymentService.addSignature(paymentId, signer, signature);
+
+      return res.json({
+        status: 'success',
+        data: {
+          multiSigPayment,
+          signatureProgress: {
+            collected: multiSigPayment.signatures.length,
+            required: multiSigPayment.requiredSignatures,
+            complete: multiSigPayment.signatures.length >= multiSigPayment.requiredSignatures,
+          },
+        },
+      });
+    } catch (err: any) {
+      return res.status(400).json({ error: 'SignatureError', message: err.message });
+    }
+  })
+);
+
+// GET /payments/multisig/:paymentId — get multi-sig payment details
+router.get(
+  '/multisig/:paymentId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { paymentId } = req.params;
+
+    try {
+      const { multiSigPaymentService } = await import('./services/multisig-payment.service');
+      const multiSigPayment = await multiSigPaymentService.getMultiSigPayment(paymentId);
+
+      return res.json({ status: 'success', data: multiSigPayment });
+    } catch (err: any) {
+      return res.status(404).json({ error: 'NotFound', message: err.message });
+    }
+  })
+);
+
+// GET /payments/multisig/pending/:signer — list pending multi-sig payments for a signer
+router.get(
+  '/multisig/pending/:signer',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { signer } = req.params;
+
+    try {
+      const { multiSigPaymentService } = await import('./services/multisig-payment.service');
+      const payments = await multiSigPaymentService.getPendingPaymentsForSigner(signer);
+
+      return res.json({ status: 'success', data: payments });
+    } catch (err: any) {
+      return res.status(400).json({ error: 'Error', message: err.message });
+    }
+  })
+);
+
 export const paymentRoutes = router;
