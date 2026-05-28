@@ -320,3 +320,25 @@ export function sendPortalMfaBackupCodesEmail(to: string, patientName: string, b
   `;
   enqueue(to, 'Portal MFA Backup Codes — Health Watchers', text, html);
 }
+
+/** Referral outcome notification sent to referring doctor */
+export function sendOutcomeNotificationEmail(
+  to: string,
+  doctorName: string,
+  data: { outcome: string; referralId: string }
+): void {
+  const referralUrl = `${APP_BASE_URL()}/referrals/${data.referralId}`;
+  const outcomeLabel = data.outcome === 'attended' ? 'Patient Attended' : data.outcome.charAt(0).toUpperCase() + data.outcome.slice(1);
+  const text = `A referral outcome has been recorded: ${outcomeLabel}.\n\nReferral ID: ${data.referralId}\nView: ${referralUrl}`;
+  const html = `
+    <h3>Referral Outcome Recorded</h3>
+    <p>Hello <strong>${doctorName}</strong>,</p>
+    <p>A referral outcome has been recorded for one of your referrals.</p>
+    <table style="border-collapse:collapse;width:100%;margin:16px 0">
+      <tr><td style="padding:8px;font-weight:bold">Outcome</td><td style="padding:8px">${outcomeLabel}</td></tr>
+      <tr style="background:#f9fafb"><td style="padding:8px;font-weight:bold">Referral ID</td><td style="padding:8px;font-family:monospace;font-size:12px">${data.referralId}</td></tr>
+    </table>
+    <p><a href="${referralUrl}">View Referral Details</a></p>
+  `;
+  enqueue(to, `Referral Outcome Recorded — Health Watchers`, text, html);
+}

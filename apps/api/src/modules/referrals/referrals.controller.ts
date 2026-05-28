@@ -189,4 +189,107 @@ router.get(
   }),
 );
 
+// PATCH /referrals/:id/outcome — record referral outcome
+router.patch(
+  '/:id/outcome',
+  DOCTOR_ROLES,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { outcome, outcomeNotes } = req.body;
+
+    if (!outcome || !['attended', 'no-show', 'cancelled', 'pending'].includes(outcome)) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Valid outcome required' });
+    }
+
+    const referral = await ReferralModel.findOne({
+      _id: req.params.id,
+      toClinicId: req.user!.clinicId,
+      status: 'accepted',
+    });
+    if (!referral) return res.status(404).json({ error: 'NotFound', message: 'Accepted referral not found' });
+
+    referral.outcome = outcome as any;
+    referral.outcomeDate = new Date();
+    referral.outcomeNotes = outcomeNotes;
+    if (outcome !== 'pending') {
+      referral.completedAt = new Date();
+      referral.status = 'completed';
+    }
+    await referral.save();
+
+    // Notify referring doctor
+    const referringDoctor = await UserModel.findById(referral.referredBy).lean();
+    if (referringDoctor?.email) {
+      const { sendOutcomeNotificationEmail } = await import('@api/lib/email.service');
+      sendOutcomeNotificationEmail(referringDoctor.email, referringDoctor.fullName, {
+        outcome,
+        referralId: String(referral._id),
+      });
+    }
+
+    await AuditLogModel.create({
+      userId: new Types.ObjectId(req.user!.userId),
+      clinicId: new Types.ObjectId(req.user!.clinicId),
+      action: 'REFERRAL_OUTCOME_RECORD',
+      resourceType: 'Referral',
+      resourceId: String(referral._id),
+      metadata: { outcome, outcomeNotes },
+      outcome: 'SUCCESS',
+      timestamp: new Date(),
+    });
+
+    return res.json({ status: 'success', data: referral });
+  }),
+);
+
+// GET /referrals/analytics — referral analytics and metrics
+router.get(
+  '/analytics',
+  requireRoles('CLINIC_ADMIN'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const clinicId = req.user!.clinicId;
+    const referrals = await ReferralModel.find({ toClinicId: clinicId }).lean();
+
+    const completed = referrals.filter((r: any) => r.status === 'completed');
+    const completionRate = referrals.length > 0 ? (completed.length / referrals.length) * 100 : 0;
+
+    const attended = referrals.filter((r: any) => r.outcome === 'attended');
+    const attendanceRate = completed.length > 0 ? (attended.length / completed.length) * 100 : 0;
+
+    // Calculate average time to completion
+    const completedWithDates = completed.filter((r: any) => r.createdAt && r.completedAt);
+    const avgTimeToCompletion =
+      completedWithDates.length > 0
+        ? completedWithDates.reduce((sum: number, r: any) => {
+            const days = (r.completedAt - r.createdAt) / (1000 * 60 * 60 * 24);
+            return sum + days;
+          }, 0) / completedWithDates.length
+        : 0;
+
+    // Top referral destinations
+    const destinations = await ReferralModel.aggregate([
+      { $match: { toClinicId: new Types.ObjectId(clinicId) } },
+      { $group: { _id: '$fromClinicId', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 },
+      { $lookup: { from: 'clinics', localField: '_id', foreignField: '_id', as: 'clinic' } },
+    ]);
+
+    return res.json({
+      status: 'success',
+      data: {
+        totalReferrals: referrals.length,
+        completedReferrals: completed.length,
+        completionRate: Math.round(completionRate * 100) / 100,
+        attendanceRate: Math.round(attendanceRate * 100) / 100,
+        avgTimeToCompletionDays: Math.round(avgTimeToCompletion * 100) / 100,
+        topReferralSources: destinations.map((d: any) => ({
+          clinicId: d._id,
+          clinicName: d.clinic[0]?.name || 'Unknown',
+          referralCount: d.count,
+        })),
+      },
+    });
+  }),
+);
+
 export const referralRoutes = router;

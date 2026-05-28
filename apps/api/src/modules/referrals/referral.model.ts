@@ -19,6 +19,11 @@ export interface IReferral extends Document {
   acceptedBy?: mongoose.Types.ObjectId;
   acceptedAt?: Date;
   declinedReason?: string;
+  // Outcome tracking fields
+  outcome?: 'attended' | 'no-show' | 'cancelled' | 'pending';
+  outcomeDate?: Date;
+  outcomeNotes?: string;
+  completedAt?: Date;
 }
 
 const ReferralSchema = new Schema<IReferral>(
@@ -41,6 +46,11 @@ const ReferralSchema = new Schema<IReferral>(
     acceptedBy:    { type: Schema.Types.ObjectId, ref: 'User' },
     acceptedAt:    { type: Date },
     declinedReason:{ type: String },
+    // Outcome tracking fields
+    outcome:       { type: String, enum: ['attended', 'no-show', 'cancelled', 'pending'], default: 'pending' },
+    outcomeDate:   { type: Date },
+    outcomeNotes:  { type: String },
+    completedAt:   { type: Date },
   },
   { timestamps: true, versionKey: false },
 );
@@ -49,6 +59,8 @@ ReferralSchema.index({ fromClinicId: 1, createdAt: -1 });
 ReferralSchema.index({ toClinicId: 1, createdAt: -1 });
 ReferralSchema.index({ patientId: 1, createdAt: -1 });
 ReferralSchema.index({ status: 1 });
+ReferralSchema.index({ outcome: 1, outcomeDate: -1 });
+ReferralSchema.index({ toClinicId: 1, outcome: 1 });
 
 export const ReferralModel =
   mongoose.models.Referral || mongoose.model<IReferral>('Referral', ReferralSchema);
