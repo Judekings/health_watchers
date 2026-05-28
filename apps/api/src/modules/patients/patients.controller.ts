@@ -27,6 +27,7 @@ import {
 import { auditLog } from '../audit/audit.service';
 import { withSpan } from '@api/utils/tracer';
 import { cache } from '@api/services/cache.service';
+import { communicationsRouter } from '../communications/communications.controller';
 
 const router = Router();
 router.use(authenticate);
@@ -1030,5 +1031,8 @@ router.post(
     return res.json({ status: 'success', data: { interpretation } });
   })
 );
+
+// Mount communications router
+router.use('/:id/communications', communicationsRouter);
 
 export const patientRoutes = router;
