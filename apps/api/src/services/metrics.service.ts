@@ -80,6 +80,13 @@ export const aiRequestsTotal = new client.Counter({
   registers: [register],
 });
 
+export const subscriptionLimitViolations = new client.Counter({
+  name: 'subscription_limit_violations_total',
+  help: 'Total number of subscription limit violations',
+  labelNames: ['tier', 'resource'] as const,
+  registers: [register],
+});
+
 // ── System Metrics ────────────────────────────────────────────────────────────
 
 export const mongodbConnectionPoolSize = new client.Gauge({
