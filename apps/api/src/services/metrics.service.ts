@@ -126,6 +126,15 @@ export const mongodbKeyDecryptionFailures = new client.Counter({
   registers: [register],
 });
 
+// ── Subscription Metrics ──────────────────────────────────────────────────────
+
+export const subscriptionLimitViolations = new client.Counter({
+  name: 'subscription_limit_violations_total',
+  help: 'Total number of subscription limit violations by tier and resource',
+  labelNames: ['tier', 'resource'] as const,
+  registers: [register],
+});
+
 // ── Normalise path helper ─────────────────────────────────────────────────────
 // Replace dynamic segments (ObjectIds, UUIDs, numbers) with placeholders
 // to avoid high-cardinality label explosion.
