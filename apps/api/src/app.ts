@@ -67,6 +67,9 @@ import {
   startWaitlistExpiryJob,
   stopWaitlistExpiryJob,
 } from './modules/appointments/waitlist-expiry-job';
+import {
+  startImmunizationComplianceJob,
+} from './modules/immunizations/immunization-compliance-job';
 import { getCacheMetrics } from './services/cache.service';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
@@ -287,6 +290,7 @@ async function startServer() {
   startRiskRecalculationJob();
   startBalanceMonitoringJob();
   startWaitlistExpiryJob();
+  startImmunizationComplianceJob();
 
   // Track MongoDB connection pool size for Prometheus
   setInterval(() => {
