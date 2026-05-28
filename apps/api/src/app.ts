@@ -80,6 +80,8 @@ import {
   mongodbConnectionPoolSize,
   mongodbPoolWaitQueueSize,
 } from './services/metrics.service';
+import { metricsMiddleware } from './middlewares/metrics.middleware';
+import metricsRouter from './modules/metrics/metrics.routes';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
@@ -312,7 +314,7 @@ async function startServer() {
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
-    const pool = mongoose.connection.pool;
+    const pool = (mongoose.connection as any).pool;
     const poolSize = pool?.totalConnectionCount ?? 0;
     const waitQueueSize = pool?.waitQueueSize ?? 0;
     mongodbConnectionPoolSize.set(poolSize);
