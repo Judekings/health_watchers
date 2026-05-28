@@ -31,7 +31,11 @@ export type AuditAction =
   | 'PAYMENT_EXPORT'
   | 'DOSAGE_CALCULATION'
   | 'COMMUNICATION_LOG_CREATED'
-  | 'COMMUNICATION_LOG_VIEWED';
+  | 'COMMUNICATION_LOG_VIEWED'
+  | 'BATCH_PAYMENT_CREATED'
+  | 'BATCH_PAYMENT_SUBMITTED'
+  | 'BATCH_PAYMENT_CONFIRMED'
+  | 'BATCH_PAYMENT_FAILED';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -85,6 +89,10 @@ const auditLogSchema = new Schema<AuditLog>(
         'DOSAGE_CALCULATION',
         'COMMUNICATION_LOG_CREATED',
         'COMMUNICATION_LOG_VIEWED',
+        'BATCH_PAYMENT_CREATED',
+        'BATCH_PAYMENT_SUBMITTED',
+        'BATCH_PAYMENT_CONFIRMED',
+        'BATCH_PAYMENT_FAILED',
       ],
       index: true,
     },
