@@ -72,6 +72,10 @@ import {
   stopAppointmentReminderJob,
 } from './modules/appointments/appointment-reminder-job';
 import { getCacheMetrics } from './services/cache.service';
+import {
+  mongodbConnectionPoolSize,
+  mongodbPoolWaitQueueSize,
+} from './services/metrics.service';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
@@ -91,6 +95,7 @@ import onboardingRoutes from './modules/clinics/onboarding.routes';
 import peerReviewsRouter from './modules/peer-reviews/peer-reviews.router';
 import { preAuthRoutes } from './modules/pre-auth/pre-auth.controller';
 import federationRouter from './modules/federation/federation.router';
+import exportRouter from './modules/export/export.routes';
 import { complianceRoutes } from './modules/compliance/compliance.controller';
 
 
@@ -263,6 +268,9 @@ app.use('/api/v1/compliance', complianceRoutes);
 app.use('/.well-known', federationRouter);
 app.use('/federation', federationRouter);
 
+// ── Export routes (HIPAA Right of Access + FHIR) ──────────────────────────────
+app.use('/api/v1', exportRouter);
+
 setupSwagger(app);
 
 // ── 404 & global error handler ────────────────────────────────────────────────
@@ -293,10 +301,13 @@ async function startServer() {
   startWaitlistExpiryJob();
   startAppointmentReminderJob();
 
-  // Track MongoDB connection pool size for Prometheus
+  // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
-    const poolSize = mongoose.connection.pool?.totalConnectionCount ?? 0;
+    const pool = mongoose.connection.pool;
+    const poolSize = pool?.totalConnectionCount ?? 0;
+    const waitQueueSize = pool?.waitQueueSize ?? 0;
     mongodbConnectionPoolSize.set(poolSize);
+    mongodbPoolWaitQueueSize.set(waitQueueSize);
   }, 15_000);
 
   // Graceful shutdown handler
