@@ -321,4 +321,40 @@ cvxCodesRouter.get(
   }),
 );
 
+// GET /api/v1/immunizations/overdue — List overdue immunizations
+router.get(
+  '/overdue',
+  requireRoles('CLINIC_ADMIN', 'DOCTOR'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const clinicId = req.user!.clinicId;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const { immunizationComplianceService } = await import('./immunization-compliance.service');
+
+    // Get all patients in clinic
+    const patients = await PatientModel.find({ clinicId, isActive: true })
+      .select('_id firstName lastName dateOfBirth attendingDoctorId')
+      .lean();
+
+    const allOverdue = [];
+    for (const patient of patients) {
+      const overdue = await immunizationComplianceService.findOverdueForPatient(patient._id.toString());
+      allOverdue.push(...overdue);
+    }
+
+    // Sort by days overdue (descending)
+    allOverdue.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+    // Paginate
+    const paginatedOverdue = allOverdue.slice(offset, offset + limit);
+
+    return res.json({
+      status: 'success',
+      data: paginatedOverdue,
+      pagination: { limit, offset, total: allOverdue.length },
+    });
+  }),
+);
+
 export const immunizationRoutes = router;
