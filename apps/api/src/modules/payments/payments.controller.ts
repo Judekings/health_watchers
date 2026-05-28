@@ -1067,4 +1067,86 @@ router.get(
   })
 );
 
+// ── Soroban Escrow endpoints ──────────────────────────────────────────────────
+
+// POST /api/v1/payments/:id/escrow
+router.post(
+  '/:id/escrow',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'DOCTOR'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const payment = await PaymentRecordModel.findById(id);
+
+    if (!payment) {
+      return res.status(404).json({ error: 'NotFound', message: 'Payment not found' });
+    }
+
+    if (payment.clinicId.toString() !== req.user!.clinicId.toString()) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Access denied' });
+    }
+
+    if (payment.paymentType !== 'escrow') {
+      return res.status(400).json({ error: 'BadRequest', message: 'Payment is not escrow type' });
+    }
+
+    try {
+      const { sorobanEscrowService } = await import('./services/soroban-escrow.service');
+      const escrow = await sorobanEscrowService.createEscrow({
+        paymentId: id,
+        amount: payment.amount,
+        destination: payment.destination,
+        encounterId: payment.encounterId || '',
+      });
+
+      payment.sorobanContractId = escrow.contractId;
+      payment.escrowStatus = 'held';
+      await payment.save();
+
+      return res.json({ status: 'success', data: { contractId: escrow.contractId, txHash: escrow.txHash } });
+    } catch (err: any) {
+      logger.error({ error: err }, 'Failed to create escrow');
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  })
+);
+
+// POST /api/v1/payments/:id/release
+router.post(
+  '/:id/release',
+  authenticate,
+  requireRoles('CLINIC_ADMIN', 'DOCTOR'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const payment = await PaymentRecordModel.findById(id);
+
+    if (!payment) {
+      return res.status(404).json({ error: 'NotFound', message: 'Payment not found' });
+    }
+
+    if (payment.clinicId.toString() !== req.user!.clinicId.toString()) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Access denied' });
+    }
+
+    if (!payment.sorobanContractId) {
+      return res.status(400).json({ error: 'BadRequest', message: 'No escrow contract found' });
+    }
+
+    try {
+      const { sorobanEscrowService } = await import('./services/soroban-escrow.service');
+      const result = await sorobanEscrowService.releaseEscrow(payment.sorobanContractId);
+
+      payment.escrowStatus = 'released';
+      payment.escrowReleasedAt = new Date();
+      payment.status = 'confirmed';
+      await payment.save();
+
+      return res.json({ status: 'success', data: { txHash: result.txHash } });
+    } catch (err: any) {
+      logger.error({ error: err }, 'Failed to release escrow');
+      return res.status(500).json({ error: 'InternalError', message: err.message });
+    }
+  })
+);
+
 export const paymentRoutes = router;

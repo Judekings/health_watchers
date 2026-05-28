@@ -35,6 +35,10 @@ export interface PaymentRecord {
   // Expiry fields
   expiresAt?: Date;
   paymentType?: 'immediate' | 'multisig' | 'escrow';
+  // Soroban escrow fields
+  sorobanContractId?: string;
+  escrowStatus?: 'held' | 'released' | 'cancelled';
+  escrowReleasedAt?: Date;
 }
 
 const paymentRecordSchema = new Schema<PaymentRecord>(
@@ -78,6 +82,10 @@ const paymentRecordSchema = new Schema<PaymentRecord>(
     // Expiry fields
     expiresAt: { type: Date, index: true },
     paymentType: { type: String, enum: ['immediate', 'multisig', 'escrow'], default: 'immediate' },
+    // Soroban escrow fields
+    sorobanContractId: { type: String, index: true },
+    escrowStatus: { type: String, enum: ['held', 'released', 'cancelled'], default: undefined },
+    escrowReleasedAt: { type: Date },
   },
   { timestamps: true, versionKey: false }
 );
