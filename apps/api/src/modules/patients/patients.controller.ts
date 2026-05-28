@@ -1036,4 +1036,7 @@ router.post(
   })
 );
 
+// Mount communications router
+router.use('/:id/communications', communicationsRouter);
+
 export const patientRoutes = router;
