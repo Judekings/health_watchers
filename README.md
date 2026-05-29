@@ -294,3 +294,22 @@ For questions, issues, or feature requests:
 ---
 
 Made with ❤️ by the Health Watchers team
+
+## API Documentation
+
+### Swagger / OpenAPI
+Interactive docs are available at `/api/docs` when the server is running.
+
+### Postman Collection
+Import the collection and environment from [`docs/postman/`](./docs/postman/) to get started immediately.
+
+| File | Purpose |
+|------|---------|
+| `health-watchers.postman_collection.json` | All API requests with pre-request auth scripts |
+| `health-watchers.postman_environment.json` | Environment variables template |
+
+**Quick start:**
+1. Import both files into Postman
+2. Set `admin_email` and `admin_password` in the environment
+3. Run **Auth → Login** — `jwt_token` is set automatically
+4. All subsequent requests use the token via collection-level bearer auth
