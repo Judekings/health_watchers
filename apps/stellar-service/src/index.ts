@@ -40,6 +40,7 @@ import {
   getCircuitBreakerState,
 } from './error-handler.js';
 import { metricsMiddleware, metricsHandler } from './metrics.js';
+import { startPaymentStream } from './payment-stream.js';
 
 dotenv.config();
 
@@ -447,6 +448,10 @@ app.get('/monitor/stream', requireSecret, (req, res): any => {
   });
 });
 
+const closePaymentStream = startPaymentStream((payment) => {
+  logger.info({ memo: payment.memo, txHash: payment.txHash }, 'Stellar payment confirmed');
+});
+
 const server: Server = app.listen(PORT, () => {
   logger.info({ 
     port: PORT, 
@@ -461,6 +466,7 @@ const shutdown = async (signal: string) => {
   logger.info(`${signal} received, starting graceful shutdown`);
 
   // Stop accepting new connections
+  closePaymentStream();
   server.close(() => {
     logger.info('HTTP server closed');
     logger.info('Graceful shutdown completed');
