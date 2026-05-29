@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { config } from '@health-watchers/config';
 import { PaymentRecordModel } from './models/payment-record.model';
+import { PaymentDisputeModel } from './models/payment-dispute.model';
 import { authenticate } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import {
@@ -21,6 +22,7 @@ import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
 import { emitToClinic } from '@api/realtime/socket';
 import { paymentsInitiatedTotal, paymentsConfirmedTotal } from '@api/services/metrics.service';
+import { getCurrentXLMRate } from './services/xlm-rate.service';
 
 const router = Router();
 router.use(authenticate);
@@ -856,9 +858,22 @@ router.patch(
       }
     }
 
+    // Capture the exchange rate at the time of payment so receipts show an
+    // accurate USD equivalent even if the rate changes later. USDC is pegged ~1:1.
+    let exchangeRate = payment.exchangeRate;
+    if (!exchangeRate) {
+      if (payment.assetCode === 'USDC') {
+        exchangeRate = '1';
+      } else {
+        const current = await getCurrentXLMRate();
+        exchangeRate = current.rateUSD.toString();
+      }
+    }
+    const usdEquivalent = (parseFloat(payment.amount) * parseFloat(exchangeRate)).toFixed(2);
+
     const updatedPayment = await PaymentRecordModel.findByIdAndUpdate(
       payment._id,
-      { status: 'confirmed', txHash, confirmedAt: new Date() },
+      { status: 'confirmed', txHash, confirmedAt: new Date(), exchangeRate, usdEquivalent },
       { new: true }
     );
 
@@ -1530,6 +1545,11 @@ router.get(
     }
 
     try {
+      // Surface dispute status on the receipt so patients/clinics see it at a glance.
+      const dispute = await PaymentDisputeModel.findOne({ paymentIntentId: intentId })
+        .select('status resolution refundIntentId')
+        .lean();
+
       // Return pre-signed S3 URL or receipt data
       return res.json({
         status: 'success',
@@ -1537,6 +1557,8 @@ router.get(
           receiptUrl: payment.receiptUrl,
           receiptNumber: payment.receiptNumber,
           generatedAt: payment.receiptGeneratedAt,
+          disputeStatus: dispute ? (dispute as any).status : 'none',
+          refundIntentId: dispute ? (dispute as any).refundIntentId : undefined,
         },
       });
     } catch (err: any) {

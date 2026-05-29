@@ -259,10 +259,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     <nav
       ref={sidebarRef}
       aria-label="Main navigation"
-      className="bg-neutral-0 flex h-full w-60 flex-col border-r border-neutral-200"
+      className="bg-neutral-0 dark:bg-neutral-800 dark:border-neutral-700 flex h-full w-60 flex-col border-r border-neutral-200"
     >
       {/* Logo area */}
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-neutral-200 px-5">
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-neutral-200 dark:border-neutral-700 px-5">
         <span className="text-primary-500 text-lg font-bold tracking-tight">HealthWatchers</span>
       </div>
 

@@ -31,6 +31,12 @@ export const stellarTransactionsTotal = new client.Counter({
   registers: [register],
 });
 
+export const stellarPaymentQueueDepth = new client.Gauge({
+  name: 'stellar_payment_queue_depth',
+  help: 'Current number of payments waiting to be processed',
+  registers: [register],
+});
+
 function normalisePath(path: string): string {
   return path
     .replace(/\/[A-Z0-9]{56}/gi, '/:publicKey') // Stellar public keys

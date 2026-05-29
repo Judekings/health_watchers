@@ -19,8 +19,9 @@ k8s/
 │   ├── deployment.yaml         # Web Deployment (2 replicas)
 │   └── service.yaml            # Web ClusterIP Service
 └── stellar-service/
-    ├── deployment.yaml         # Stellar Service Deployment (1 replica)
-    └── service.yaml            # Stellar Service ClusterIP Service
+    ├── deployment.yaml         # Stellar Service Deployment (2 replicas)
+    ├── service.yaml            # Stellar Service ClusterIP Service
+    └── hpa.yaml                # HorizontalPodAutoscaler (2–10 replicas)
 
 helm/health-watchers/           # Helm chart (see helm/README.md)
 ```
@@ -92,11 +93,30 @@ kubectl get hpa -n health-watchers
 
 ## Autoscaling
 
-The API service has a HorizontalPodAutoscaler configured:
-- **Min replicas**: 2
-- **Max replicas**: 10
-- **Scale up trigger**: CPU > 70% or Memory > 80%
-- **Scale down**: stabilized over 5 minutes to prevent flapping
+Both the API and Stellar Service have HorizontalPodAutoscalers configured:
+
+| Service         | Min | Max | CPU trigger | Memory trigger | Custom metric                        |
+|-----------------|-----|-----|-------------|----------------|--------------------------------------|
+| API             | 2   | 10  | > 70%       | > 80%          | —                                    |
+| Stellar Service | 2   | 10  | > 70%       | > 80%          | `stellar_payment_queue_depth` > 10   |
+
+Scale-up is stabilized over 60 s (max +2 pods/min); scale-down over 5 minutes (max -1 pod/min) to prevent flapping.
+
+### Stellar Service custom metric
+
+The `stellar_payment_queue_depth` Prometheus gauge is exposed by the stellar-service on `/metrics`. To use it as an HPA trigger you need the [Prometheus Adapter](https://github.com/kubernetes-sigs/prometheus-adapter) installed and configured to expose `stellar_payment_queue_depth` as a custom metrics API resource.
+
+```bash
+# Install Prometheus Adapter (example with Helm)
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install prometheus-adapter prometheus-community/prometheus-adapter \
+  --set prometheus.url=http://prometheus.monitoring.svc \
+  --set rules.custom[0].seriesQuery='stellar_payment_queue_depth' \
+  --set rules.custom[0].resources.overrides.namespace.resource=namespace \
+  --set rules.custom[0].resources.overrides.pod.resource=pod \
+  --set rules.custom[0].name.matches='stellar_payment_queue_depth' \
+  --set rules.custom[0].metricsQuery='avg(<<.Series>>{<<.LabelMatchers>>})'
+```
 
 ## Health Probes
 

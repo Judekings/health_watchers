@@ -85,6 +85,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Required gate: any CRITICAL vulnerability fails CI and blocks merge.
+      - name: npm audit (fail on critical)
+        run: npm audit --audit-level=critical
+
       - name: npm audit (fail on high/critical)
         run: npm audit --audit-level=high
 
@@ -123,6 +127,15 @@ jobs:
 
       - name: Run API tests (unit + integration)
         run: npm test --workspace=api
+        env:
+          JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
+          STELLAR_NETWORK: testnet
+          NODE_ENV: test
+          API_PORT: 3001
+
+      - name: Verify API security headers
+        run: npm test --workspace=api -- --runInBand src/__tests__/security-headers.test.ts
         env:
           JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
           JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!

@@ -71,6 +71,8 @@ export interface Encounter {
   encounteredBy?: Schema.Types.ObjectId;
   type?: 'consultation' | 'telemedicine' | 'follow-up' | 'procedure';
   appointmentId?: Schema.Types.ObjectId;
+  /** The specific template version used when creating this encounter. */
+  templateVersionId?: Schema.Types.ObjectId;
   chiefComplaint: string;
   status: 'open' | 'closed' | 'follow-up' | 'cancelled' | 'pending_cosignature';
   notes?: string;
@@ -186,6 +188,7 @@ const encounterSchema = new Schema<Encounter>(
     encounteredBy:     { type: Schema.Types.ObjectId, ref: 'User' },
     type:              { type: String, enum: ['consultation', 'telemedicine', 'follow-up', 'procedure'], default: 'consultation' },
     appointmentId:     { type: Schema.Types.ObjectId, ref: 'Appointment' },
+    templateVersionId: { type: Schema.Types.ObjectId, ref: 'EncounterTemplate' },
     chiefComplaint:    { type: String, required: true },
     status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled', 'pending_cosignature'], default: 'open', index: true },
     notes:             { type: String },

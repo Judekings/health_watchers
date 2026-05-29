@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ErrorMessage, Toast, SlideOver, PageWrapper, PageHeader } from '@/components/ui';
+import {
+  ErrorMessage,
+  Toast,
+  SlideOver,
+  PageWrapper,
+  PageHeader,
+  SectionErrorBoundary,
+} from '@/components/ui';
 import { PaymentTable, type Payment } from '@/components/payments/PaymentTable';
 import { PaymentIntentForm, type PaymentIntentData } from '@/components/forms/PaymentIntentForm';
 import { Button } from '@/components/ui/Button';
@@ -149,7 +156,9 @@ export default function PaymentsClient() {
       )}
 
       {!isLoading && !error && (
-        <PaymentTable payments={displayPayments} network={NETWORK} onConfirm={handleConfirm} />
+        <SectionErrorBoundary name="payment panel">
+          <PaymentTable payments={displayPayments} network={NETWORK} onConfirm={handleConfirm} />
+        </SectionErrorBoundary>
       )}
 
       <SlideOver isOpen={showForm} onClose={() => setShowForm(false)} title="New Payment Intent">

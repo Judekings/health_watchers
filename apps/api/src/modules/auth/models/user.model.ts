@@ -14,6 +14,7 @@ const ROLES: AppRole[] = [
 
 export interface UserPreferences {
   language: string;
+  theme: 'light' | 'dark' | 'system';
   emailNotifications: boolean;
   inAppNotifications: boolean;
   notificationTypes: {
@@ -120,6 +121,7 @@ const userSchema = new Schema(
     mustChangePassword: { type: Boolean, default: false },
     preferences: {
       language: { type: String, default: 'en' },
+      theme: { type: String, enum: ['light', 'dark', 'system'], default: 'system' },
       emailNotifications: { type: Boolean, default: true },
       inAppNotifications: { type: Boolean, default: true },
       notificationTypes: {

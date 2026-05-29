@@ -36,6 +36,9 @@ import {
   aiLimiter,
   paymentLimiter,
   generalLimiter,
+  bulkExportLimiter,
+  patientSearchLimiter,
+  reportGenerationLimiter,
 } from './middlewares/rate-limit.middleware';
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
 import { waitlistRoutes } from './modules/appointments/waitlist.controller';
@@ -75,6 +78,7 @@ import {
   startClaimableExpiryNotificationJob,
   stopClaimableExpiryNotificationJob,
 } from './modules/payments/services/claimable-expiry-notification-job';
+import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
 import { getCacheMetrics } from './services/cache.service';
 import {
   mongodbConnectionPoolSize,
@@ -242,6 +246,7 @@ app.use('/api/v1/clinics', clinicRoutes);
 app.use('/api/v1/users', userManagementRoutes); // User management endpoints
 app.use('/api/v1/users', userRoutes); // User profile endpoints
 app.use('/api/v1/patients', patientRoutes);
+app.use('/api/v1/patients/search', patientSearchLimiter);
 app.use('/api/v1/patients', medicalHistoryRoutes);
 app.use('/api/v1/patients', patientPhotoRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
@@ -263,7 +268,7 @@ app.use('/api/v1/referrals', referralRoutes);
 app.use('/api/v1/invoices', invoiceRoutes);
 app.use('/api/v1/care-plans', carePlanRoutes);
 app.use('/api/v1/portal', portalRoutes);
-app.use('/api/v1/reports', reportRoutes);
+app.use('/api/v1/reports', reportGenerationLimiter, reportRoutes);
 app.use('/api/v1', consentRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
 app.use('/api/v1/schedules', scheduleRoutes);
@@ -311,6 +316,7 @@ async function startServer() {
   startWaitlistExpiryJob();
   startAppointmentReminderJob();
   startClaimableExpiryNotificationJob();
+  startXLMRateJob();
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
@@ -338,6 +344,7 @@ async function startServer() {
         stopWaitlistExpiryJob();
         stopAppointmentReminderJob();
         stopClaimableExpiryNotificationJob();
+        stopXLMRateJob();
         logger.info('All background jobs stopped');
 
         // Close database connection

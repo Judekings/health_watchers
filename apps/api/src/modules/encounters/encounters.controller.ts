@@ -306,6 +306,19 @@ router.post(
     encountersCreatedTotal.inc({ clinicId: req.user!.clinicId });
     await incrementUsage(req.user!.clinicId, 'encounterCount');
 
+    // Track ICD-10 codes used on this encounter so they surface in the clinic's
+    // "recently used" list. Best-effort — never blocks encounter creation.
+    if (Array.isArray(req.body.diagnosis) && req.body.diagnosis.length) {
+      const { recordRecentUsage } = await import('../icd10/icd10-favorites.service');
+      await Promise.all(
+        req.body.diagnosis
+          .filter((d: { code?: string }) => d?.code)
+          .map((d: { code: string; description?: string }) =>
+            recordRecentUsage(req.user!.clinicId, d.code, d.description ?? '')
+          )
+      );
+    }
+
     // Evaluate CDS rules for encounter creation
     const patientContext = await cdsRulesEngine.getPatientContext(req.body.patientId, req.user!.clinicId);
     const cdsAlerts = await cdsRulesEngine.evaluateRules('encounter_create', {
@@ -476,6 +489,72 @@ router.post(
       return res.status(404).json({ error: 'NotFound', message: 'Encounter not found' });
     }
 
+    const rx = req.body as { drugName: string; allergyOverride?: { allergyId: string; reason: string } };
+
+    // ── Allergy cross-reference check ─────────────────────────────────────────
+    const allergyWarnings: Array<{ allergen: string; severity: string; reaction: string }> = [];
+    const patient = await PatientModel.findById(encounter.patientId).select('allergies').lean();
+    const activeAllergies = (patient?.allergies ?? []).filter(
+      (a: any) => a.isActive && a.allergenType === 'drug'
+    );
+
+    const allergyMatch = activeAllergies.find(
+      (a: any) =>
+        rx.drugName.toLowerCase().includes(a.allergen.toLowerCase()) ||
+        a.allergen.toLowerCase().includes(rx.drugName.toLowerCase())
+    );
+
+    if (allergyMatch) {
+      const overrideId = rx.allergyOverride?.allergyId;
+      const hasOverride =
+        overrideId &&
+        String((allergyMatch as any)._id) === overrideId &&
+        rx.allergyOverride?.reason;
+
+      if (!hasOverride) {
+        return res.status(409).json({
+          error: 'AllergyConflict',
+          message: `Patient has a known ${allergyMatch.severity} allergy to '${allergyMatch.allergen}' (reaction: ${allergyMatch.reaction}). Provide allergyOverride with a reason to proceed.`,
+          allergy: allergyMatch,
+        });
+      }
+
+      // Override provided — audit and warn
+      allergyWarnings.push({
+        allergen: allergyMatch.allergen,
+        severity: allergyMatch.severity,
+        reaction: allergyMatch.reaction,
+      });
+
+      auditLog(
+        {
+          action: 'ALLERGY_OVERRIDE',
+          resourceType: 'Patient',
+          resourceId: String(encounter.patientId),
+          userId: req.user!.userId,
+          clinicId: req.user!.clinicId,
+          metadata: {
+            allergen: allergyMatch.allergen,
+            medication: rx.drugName,
+            reason: rx.allergyOverride!.reason,
+            encounterId: req.params.id,
+          },
+        },
+        req
+      );
+
+      // Emit Socket.IO warning to the clinic (doctor's room)
+      emitToClinic(req.user!.clinicId, 'prescription:allergy_warning', {
+        encounterId: req.params.id,
+        patientId: String(encounter.patientId),
+        drugName: rx.drugName,
+        allergen: allergyMatch.allergen,
+        severity: allergyMatch.severity,
+        reaction: allergyMatch.reaction,
+        overrideReason: rx.allergyOverride!.reason,
+      });
+    }
+
     const prescription: Prescription = {
       ...req.body,
       prescribedBy: req.user!.userId,
@@ -509,7 +588,7 @@ router.post(
       status: 'success',
       data: toEncounterResponse(encounter),
       cdsAlerts: cdsAlerts.length > 0 ? cdsAlerts : undefined,
-      ageAlerts: ageAlerts.length > 0 ? ageAlerts : undefined,
+      allergyWarnings: allergyWarnings.length > 0 ? allergyWarnings : undefined,
       message: 'Prescription added successfully',
     });
   })
