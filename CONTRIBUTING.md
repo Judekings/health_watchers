@@ -669,3 +669,22 @@ If you have questions, please:
 - Reach out to maintainers
 
 Thank you for contributing to Health Watchers! 🎉
+## Performance Requirements
+
+Critical API paths have k6 p95 baselines checked in CI:
+
+| Endpoint or flow | Threshold |
+| --- | ---: |
+| `GET /api/v1/patients` | 200ms |
+| `POST /api/v1/encounters` | 500ms |
+| `POST /api/v1/payments/intent` | 1s |
+| `GET /health` | 50ms |
+| List endpoints | 200ms |
+
+Run locally after starting the API:
+
+```bash
+BASE_URL=http://localhost:3001 AUTH_TOKEN=your-token k6 run performance/scripts/k6-baseline.js
+```
+
+CI fails if any p95 metric exceeds its baseline by more than 20%.

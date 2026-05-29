@@ -25,7 +25,7 @@ jobs:
   quality-checks:
     name: Quality Checks
     runs-on: ubuntu-latest
-    needs: [actionlint]
+    needs: [actionlint, validate-k8s]
 
     strategy:
       matrix:
@@ -67,6 +67,45 @@ jobs:
           name: translation-report-${{ matrix.node-version }}
           path: scripts/translation-report.json
           retention-days: 7
+
+  # Stage 1b: Kubernetes manifest validation (parallel)
+  validate-k8s:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    needs: [actionlint]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Validate raw manifests (dry-run)
+        run: |
+          kubectl apply --dry-run=client -f k8s/namespace.yaml
+          kubectl apply --dry-run=client -f k8s/api/
+          kubectl apply --dry-run=client -f k8s/web/
+          kubectl apply --dry-run=client -f k8s/stellar-service/
+
+      - name: Assert PDB files exist for all services
+        run: |
+          for svc in api web stellar-service; do
+            if [ ! -f "k8s/${svc}/pdb.yaml" ]; then
+              echo "ERROR: missing k8s/${svc}/pdb.yaml" >&2
+              exit 1
+            fi
+            echo "✓ k8s/${svc}/pdb.yaml present"
+          done
+
+      - name: Assert PDB minAvailable is set
+        run: |
+          for svc in api web stellar-service; do
+            if ! grep -q "minAvailable" "k8s/${svc}/pdb.yaml"; then
+              echo "ERROR: k8s/${svc}/pdb.yaml missing minAvailable" >&2
+              exit 1
+            fi
+            echo "✓ k8s/${svc}/pdb.yaml has minAvailable"
+          done
 
   # Stage 2: Security Scanning (parallel)
   security-scan:

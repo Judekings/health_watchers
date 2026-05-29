@@ -27,13 +27,19 @@ import { DuplicateDetectionService } from './duplicate-detection.service';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
 import { patientsCreatedTotal } from '../../services/metrics.service';
 import {
+  createInsuranceSchema,
+  updateInsuranceSchema,
+} from './insurance.validation';
+import {
   createEmergencyContactSchema,
   updateEmergencyContactSchema,
 } from './emergency-contact.validation';
 import { auditLog } from '../audit/audit.service';
 import { withSpan } from '@api/utils/tracer';
 import { cache } from '@api/services/cache.service';
+import { cacheResponse } from '@api/middlewares/cache.middleware';
 import { incrementUsage } from '../subscriptions/usage.service';
+import { communicationsRouter } from '../communications/communications.controller';
 
 const router = Router();
 router.use(authenticate);
@@ -807,6 +813,306 @@ router.delete(
       req
     );
     return res.json({ status: 'success', data: { id: req.params.allergyId, isActive: false } });
+  })
+);
+
+// ── Insurance endpoints ───────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /patients/{id}/insurance:
+ *   get:
+ *     summary: List all insurance records for a patient
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Patient MongoDB ObjectId
+ *     responses:
+ *       200:
+ *         description: List of insurance records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status: { type: string, example: success }
+ *                 data:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Insurance' }
+ *       404:
+ *         description: Patient not found
+ */
+router.get(
+  '/:id/insurance',
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    }).select('insurance');
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+    return res.json({ status: 'success', data: patient.insurance ?? [] });
+  })
+);
+
+/**
+ * @swagger
+ * /patients/{id}/insurance:
+ *   post:
+ *     summary: Add an insurance record to a patient
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/CreateInsurance' }
+ *     responses:
+ *       201:
+ *         description: Insurance record created
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Patient not found
+ */
+router.post(
+  '/:id/insurance',
+  WRITE_ROLES,
+  validateRequest({ body: createInsuranceSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    if (!patient.insurance) patient.insurance = [];
+
+    // Enforce a single primary — demote existing primary if new one is primary
+    if (req.body.isPrimary) {
+      patient.insurance.forEach((ins) => (ins.isPrimary = false));
+    }
+
+    patient.insurance.push(req.body);
+    await patient.save();
+
+    const added = patient.insurance[patient.insurance.length - 1];
+
+    auditLog(
+      {
+        action: 'INSURANCE_CREATE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { provider: req.body.provider, coverageType: req.body.coverageType },
+      },
+      req
+    );
+
+    return res.status(201).json({ status: 'success', data: added });
+  })
+);
+
+/**
+ * @swagger
+ * /patients/{id}/insurance/{insuranceId}:
+ *   put:
+ *     summary: Update an insurance record
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: insuranceId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/CreateInsurance' }
+ *     responses:
+ *       200:
+ *         description: Insurance record updated
+ *       404:
+ *         description: Patient or insurance record not found
+ */
+router.put(
+  '/:id/insurance/:insuranceId',
+  WRITE_ROLES,
+  validateRequest({ body: createInsuranceSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const ins = patient.insurance?.id(req.params.insuranceId);
+    if (!ins)
+      return res.status(404).json({ error: 'NotFound', message: 'Insurance record not found' });
+
+    // Enforce single primary
+    if (req.body.isPrimary) {
+      patient.insurance!.forEach((i) => (i.isPrimary = false));
+    }
+
+    Object.assign(ins, req.body);
+    await patient.save();
+
+    auditLog(
+      {
+        action: 'INSURANCE_UPDATE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { insuranceId: req.params.insuranceId },
+      },
+      req
+    );
+
+    return res.json({ status: 'success', data: ins });
+  })
+);
+
+/**
+ * @swagger
+ * /patients/{id}/insurance/{insuranceId}:
+ *   patch:
+ *     summary: Partially update an insurance record
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: insuranceId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/UpdateInsurance' }
+ *     responses:
+ *       200:
+ *         description: Insurance record updated
+ *       404:
+ *         description: Patient or insurance record not found
+ */
+router.patch(
+  '/:id/insurance/:insuranceId',
+  WRITE_ROLES,
+  validateRequest({ body: updateInsuranceSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const ins = patient.insurance?.id(req.params.insuranceId);
+    if (!ins)
+      return res.status(404).json({ error: 'NotFound', message: 'Insurance record not found' });
+
+    if (req.body.isPrimary) {
+      patient.insurance!.forEach((i) => (i.isPrimary = false));
+    }
+
+    Object.assign(ins, req.body);
+    await patient.save();
+
+    auditLog(
+      {
+        action: 'INSURANCE_UPDATE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { insuranceId: req.params.insuranceId },
+      },
+      req
+    );
+
+    return res.json({ status: 'success', data: ins });
+  })
+);
+
+/**
+ * @swagger
+ * /patients/{id}/insurance/{insuranceId}:
+ *   delete:
+ *     summary: Delete an insurance record
+ *     tags: [Patients]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: insuranceId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Insurance record deleted
+ *       404:
+ *         description: Patient or insurance record not found
+ */
+router.delete(
+  '/:id/insurance/:insuranceId',
+  WRITE_ROLES,
+  asyncHandler(async (req: Request, res: Response) => {
+    const patient = await PatientModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
+    if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
+
+    const index = patient.insurance?.findIndex(
+      (ins) => String(ins._id) === req.params.insuranceId
+    );
+    if (index === undefined || index === -1) {
+      return res.status(404).json({ error: 'NotFound', message: 'Insurance record not found' });
+    }
+
+    patient.insurance!.splice(index, 1);
+    await patient.save();
+
+    auditLog(
+      {
+        action: 'INSURANCE_DELETE',
+        resourceType: 'Patient',
+        resourceId: String(patient._id),
+        userId: req.user!.userId,
+        clinicId: req.user!.clinicId,
+        metadata: { insuranceId: req.params.insuranceId },
+      },
+      req
+    );
+
+    return res.json({ status: 'success', data: { id: req.params.insuranceId, deleted: true } });
   })
 );
 

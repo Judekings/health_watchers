@@ -9,7 +9,7 @@ interface Appointment {
   scheduledAt: string;
   duration: number;
   type: string;
-  status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed' | 'no-show';
+  status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed' | 'no-show' | 'patient_arrived';
   chiefComplaint?: string;
   isTelemedicine?: boolean;
   videoRoomUrl?: string;
@@ -36,6 +36,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: '#ef4444',
   completed: '#8b5cf6',
   'no-show': '#f97316',
+  'patient_arrived': '#a855f7',
 };
 
 function getWeekDays(anchor: Date): Date[] {
@@ -71,10 +72,11 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
     const params = new URLSearchParams({ dateFrom, dateTo, limit: '200' });
     if (doctorFilter) params.set('doctorId', doctorFilter);
 
-    fetch(`http://localhost:3001/api/v1/appointments?${params}`)
+    fetch(`http://localhost:3001/api/v2/appointments?${params}`)
       .then((r) => r.json())
       .then((d) => {
-        setAppointments(d?.data ?? []);
+        // V2 API returns enhanced response format
+        setAppointments(d?.success ? d.data.appointments : d?.data ?? []);
         setLoading(false);
       })
       .catch(() => setLoading(false));

@@ -3,6 +3,7 @@ import './config/env'; // must be second — validates env vars
 
 import crypto from 'crypto';
 import express from 'express';
+import { createServer } from 'http';
 import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
@@ -44,7 +45,11 @@ import { appointmentRoutes } from './modules/appointments/appointments.controlle
 import { waitlistRoutes } from './modules/appointments/waitlist.controller';
 import { labResultRoutes } from './modules/lab-results/lab-results.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
-import { apiVersionHeader } from './middlewares/versioning.middleware';
+import { 
+  apiVersionHeader, 
+  v1DeprecationWarning, 
+  getSupportedVersions 
+} from './middlewares/api-versioning.middleware';
 import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
 import { notificationRoutes } from './modules/notifications/notifications.controller';
@@ -97,6 +102,8 @@ import {
 } from './modules/immunizations/immunizations.controller';
 import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
+import { v2Router } from './routes/v2';
+import { SocketService } from './services/socket.service';
 import scheduleRoutes from './modules/schedules/schedules.routes';
 import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
 import cdsRoutes from './modules/cds/cds.controller';
@@ -108,9 +115,11 @@ import federationRouter from './modules/federation/federation.router';
 import exportRouter from './modules/export/export.routes';
 import { complianceRoutes } from './modules/compliance/compliance.controller';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
+import { breachIncidentRoutes } from './modules/breach-incidents/breach-incidents.controller';
 
 
 const app = express();
+const server = createServer(app);
 const PORT = process.env.PORT || 4000;
 
 // Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 10kb per issue #351)
@@ -219,24 +228,22 @@ app.use('/health', healthRoutes);
 app.use(metricsMiddleware);
 app.use('/metrics', metricsRouter);
 
-// ── API version header on all /api/* responses ────────────────────────────────
-app.use('/api', apiVersionHeader('1.0'));
-app.use('/api', traceIdHeader);
-
 // ── API versions endpoint ─────────────────────────────────────────────────────
-app.get('/api/versions', (_req, res) =>
-  res.json({
-    versions: [
-      {
-        version: 'v1',
-        status: 'current',
-        baseUrl: '/api/v1',
-        releaseDate: '2024-01-01',
-      },
-    ],
-    current: 'v1',
-  })
-);
+app.get('/api/versions', (_req, res) => {
+  const versions = getSupportedVersions();
+  res.json(versions);
+});
+
+// ── V1 API Routes (with deprecation warnings) ────────────────────────────────
+app.use('/api/v1', v1DeprecationWarning);
+app.use('/api/v1', apiVersionHeader('1.0'));
+app.use('/api/v1', traceIdHeader);
+
+// ── V2 API Routes (current) ───────────────────────────────────────────────────
+app.use('/api/v2', apiVersionHeader('2.0'));
+app.use('/api/v2', traceIdHeader);
+app.use('/api/v2', generalLimiter);
+app.use('/api/v2', v2Router);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/v1', generalLimiter);
@@ -278,6 +285,7 @@ app.use('/api/v1/onboarding', onboardingRoutes);
 app.use('/api/v1/pre-auth', paymentLimiter, preAuthRoutes);
 app.use('/api/v1/peer-reviews', peerReviewsRouter);
 app.use('/api/v1/compliance', complianceRoutes);
+app.use('/api/v1/admin/breach-incidents', breachIncidentRoutes);
 
 // ── Stellar federation (public, no auth) ──────────────────────────────────────
 app.use('/.well-known', federationRouter);
@@ -301,8 +309,13 @@ async function startServer() {
   // Seed built-in CDS rules
   await seedBuiltInRules();
 
-  const server = app.listen(PORT, () => {
+  // Initialize Socket.IO service
+  const socketService = SocketService.getInstance(server);
+  logger.info('Socket.IO service initialized');
+
+  server.listen(PORT, () => {
     logger.info(`🚀 Server running on http://localhost:${PORT}`);
+    logger.info('📡 Socket.IO server ready for real-time connections');
   });
 
   // Initialise Socket.IO on the same HTTP server
