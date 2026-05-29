@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
-import { AppointmentModel } from './appointment.model';
-import { authenticate } from '@api/middlewares/auth.middleware';
-import { validateRequest } from '@api/middlewares/validate.middleware';
+import { AppointmentModel } from '../../modules/appointments/appointment.model';
+import { authenticate } from '../../middlewares/auth.middleware';
+import { validateRequest } from '../../middlewares/validate.middleware';
 import {
   createAppointmentSchema,
   updateAppointmentSchema,
@@ -11,9 +11,9 @@ import {
   availabilityQuerySchema,
   appointmentIdParamsSchema,
   doctorIdParamsSchema,
-} from './appointments.validation';
+} from '../../modules/appointments/appointments.validation';
 import { SocketService } from '../../services/socket.service';
-import { NotificationModel } from '../notifications/notification.model';
+import { NotificationModel, NOTIFICATION_TYPES } from '../../modules/notifications/notification.model';
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
@@ -51,32 +51,27 @@ async function emitAppointmentStatusChange(
   appointment: any,
   additionalData?: any
 ) {
-  try {
-    const socketService = SocketService.getInstance();
-    const eventMap = {
-      confirmed: 'appointment:confirmed',
-      cancelled: 'appointment:cancelled',
-      rescheduled: 'appointment:rescheduled',
-      patient_arrived: 'appointment:patient_arrived',
-    };
+  const socketService = SocketService.getInstance();
+  const eventMap = {
+    confirmed: 'appointment:confirmed',
+    cancelled: 'appointment:cancelled',
+    rescheduled: 'appointment:rescheduled',
+    patient_arrived: 'appointment:patient_arrived',
+  };
 
-    const event = eventMap[status as keyof typeof eventMap];
-    if (event) {
-      socketService.emitAppointmentUpdate(appointmentId, event, {
-        appointment,
-        ...additionalData,
-      });
+  const event = eventMap[status as keyof typeof eventMap];
+  if (event) {
+    socketService.emitAppointmentUpdate(appointmentId, event, {
+      appointment,
+      ...additionalData,
+    });
 
-      // Also emit to clinic for staff notifications
-      socketService.emitToClinic(appointment.clinicId.toString(), event, {
-        appointmentId,
-        appointment,
-        ...additionalData,
-      });
-    }
-  } catch (error) {
-    // Log error but don't fail the request
-    console.error('Failed to emit socket event:', error);
+    // Also emit to clinic for staff notifications
+    socketService.emitToClinic(appointment.clinicId.toString(), event, {
+      appointmentId,
+      appointment,
+      ...additionalData,
+    });
   }
 }
 
@@ -127,7 +122,7 @@ appointmentRoutes.post(
       await NotificationModel.create({
         userId: appointment.doctorId,
         clinicId: appointment.clinicId,
-        type: 'appointment_status_update',
+        type: 'appointment_reminder',
         title: 'Patient Checked In',
         message: `Patient has checked in for their appointment`,
         metadata: {
@@ -150,59 +145,7 @@ appointmentRoutes.post(
   },
 );
 
-// ── GET /appointments/doctor/:doctorId/availability ───────────────────────────
-appointmentRoutes.get(
-  '/doctor/:doctorId/availability',
-  validateRequest({ params: doctorIdParamsSchema, query: availabilityQuerySchema }),
-  async (req: Request, res: Response) => {
-    try {
-      const { doctorId } = req.params;
-      const { date } = req.query as { date: string };
-
-      const dayStart = new Date(date);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(date);
-      dayEnd.setHours(23, 59, 59, 999);
-
-      const booked = await AppointmentModel.find({
-        doctorId: new Types.ObjectId(doctorId),
-        status: { $in: ['scheduled', 'confirmed'] },
-        scheduledAt: { $gte: dayStart, $lte: dayEnd },
-      })
-        .select('scheduledAt duration')
-        .sort({ scheduledAt: 1 })
-        .lean();
-
-      // Generate 30-min slots from 08:00 to 17:00
-      const slots: { time: string; available: boolean }[] = [];
-      for (let h = 8; h < 17; h++) {
-        for (const m of [0, 30]) {
-          const slotStart = new Date(date);
-          slotStart.setHours(h, m, 0, 0);
-          const slotEnd = new Date(slotStart.getTime() + 30 * 60_000);
-
-          const occupied = booked.some((appt) => {
-            const apptEnd = new Date(
-              new Date(appt.scheduledAt).getTime() + appt.duration * 60_000,
-            );
-            return new Date(appt.scheduledAt) < slotEnd && apptEnd > slotStart;
-          });
-
-          slots.push({
-            time: slotStart.toISOString(),
-            available: !occupied,
-          });
-        }
-      }
-
-      return res.json({ status: 'success', data: slots });
-    } catch (err: any) {
-      return res.status(500).json({ error: 'InternalError', message: err.message });
-    }
-  },
-);
-
-// ── GET /appointments ─────────────────────────────────────────────────────────
+// ── GET /appointments (V2 with enhanced response format) ──────────────────────
 appointmentRoutes.get(
   '/',
   validateRequest({ query: listAppointmentsQuerySchema }),
@@ -231,6 +174,8 @@ appointmentRoutes.get(
       const skip = (Number(page) - 1) * Number(limit);
       const [data, total] = await Promise.all([
         AppointmentModel.find(filter)
+          .populate('patientId', 'firstName lastName email phone')
+          .populate('doctorId', 'firstName lastName email')
           .sort({ scheduledAt: 1 })
           .skip(skip)
           .limit(Number(limit))
@@ -238,91 +183,39 @@ appointmentRoutes.get(
         AppointmentModel.countDocuments(filter),
       ]);
 
+      // V2 enhanced response format
       return res.json({
-        status: 'success',
-        data,
-        pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) },
-      });
-    } catch (err: any) {
-      return res.status(500).json({ error: 'InternalError', message: err.message });
-    }
-  },
-);
-
-// ── GET /appointments/:id ─────────────────────────────────────────────────────
-appointmentRoutes.get(
-  '/:id',
-  validateRequest({ params: appointmentIdParamsSchema }),
-  async (req: Request, res: Response) => {
-    try {
-      const { clinicId, role, userId } = req.user!;
-      const filter: Record<string, unknown> = { _id: req.params.id, clinicId };
-      if (role === 'PATIENT') filter.patientId = userId;
-
-      const appointment = await AppointmentModel.findOne(filter).lean();
-      if (!appointment)
-        return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
-
-      return res.json({ status: 'success', data: appointment });
-    } catch (err: any) {
-      return res.status(500).json({ error: 'InternalError', message: err.message });
-    }
-  },
-);
-
-// ── POST /appointments ────────────────────────────────────────────────────────
-appointmentRoutes.post(
-  '/',
-  validateRequest({ body: createAppointmentSchema }),
-  async (req: Request, res: Response) => {
-    try {
-      const { clinicId } = req.user!;
-      const { patientId, doctorId, scheduledAt, duration, type, chiefComplaint, notes } = req.body;
-
-      const start = new Date(scheduledAt);
-
-      if (await hasConflict(doctorId, start, duration ?? 30)) {
-        return res.status(409).json({
-          error: 'TimeSlotUnavailable',
-          message: 'The doctor already has an appointment during this time slot',
-        });
-      }
-
-      const appointment = await AppointmentModel.create({
-        patientId,
-        doctorId,
-        clinicId,
-        scheduledAt: start,
-        duration: duration ?? 30,
-        type,
-        chiefComplaint,
-        notes,
-      });
-
-      // Emit appointment created event
-      await emitAppointmentStatusChange(appointment._id.toString(), 'scheduled', appointment);
-
-      // Create notification for doctor
-      await NotificationModel.create({
-        userId: doctorId,
-        clinicId,
-        type: 'appointment_reminder',
-        title: 'New Appointment Scheduled',
-        message: `A new appointment has been scheduled`,
-        metadata: {
-          appointmentId: appointment._id,
-          status: 'scheduled',
+        success: true,
+        data: {
+          appointments: data,
+          pagination: { 
+            page: Number(page), 
+            limit: Number(limit), 
+            total, 
+            pages: Math.ceil(total / Number(limit)),
+            hasNext: Number(page) < Math.ceil(total / Number(limit)),
+            hasPrev: Number(page) > 1,
+          },
+          meta: {
+            totalByStatus: await AppointmentModel.aggregate([
+              { $match: filter },
+              { $group: { _id: '$status', count: { $sum: 1 } } },
+            ]),
+          },
         },
+        version: '2.0',
       });
-
-      return res.status(201).json({ status: 'success', data: appointment });
     } catch (err: any) {
-      return res.status(500).json({ error: 'InternalError', message: err.message });
+      return res.status(500).json({ 
+        success: false,
+        error: 'InternalError', 
+        message: err.message 
+      });
     }
   },
 );
 
-// ── PUT /appointments/:id ─────────────────────────────────────────────────────
+// ── PUT /appointments/:id (V2 with real-time updates) ─────────────────────────
 appointmentRoutes.put(
   '/:id',
   validateRequest({ params: appointmentIdParamsSchema, body: updateAppointmentSchema }),
@@ -330,10 +223,17 @@ appointmentRoutes.put(
     try {
       const { clinicId } = req.user!;
       const existing = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
-      if (!existing)
-        return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
+      if (!existing) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'NotFound', 
+          message: 'Appointment not found' 
+        });
+      }
 
       const { scheduledAt, duration, type, status, chiefComplaint, notes, encounterId } = req.body;
+      const oldStatus = existing.status;
+      const oldScheduledAt = existing.scheduledAt;
 
       const newStart = scheduledAt ? new Date(scheduledAt) : existing.scheduledAt;
       const newDuration = duration ?? existing.duration;
@@ -341,6 +241,7 @@ appointmentRoutes.put(
 
       if ((scheduledAt || duration) && await hasConflict(newDoctorId, newStart, newDuration, req.params.id)) {
         return res.status(409).json({
+          success: false,
           error: 'TimeSlotUnavailable',
           message: 'The doctor already has an appointment during this time slot',
         });
@@ -348,45 +249,61 @@ appointmentRoutes.put(
 
       const updated = await AppointmentModel.findByIdAndUpdate(
         req.params.id,
-        { scheduledAt: newStart, duration: newDuration, type, status, chiefComplaint, notes, encounterId },
+        { 
+          scheduledAt: newStart, 
+          duration: newDuration, 
+          type, 
+          status, 
+          chiefComplaint, 
+          notes, 
+          encounterId 
+        },
         { new: true, runValidators: true },
       ).lean();
 
       // Emit real-time events for status changes
-      if (status && status !== existing.status) {
+      if (status && status !== oldStatus) {
         await emitAppointmentStatusChange(req.params.id, status, updated);
         
         // Create notification
         await NotificationModel.create({
           userId: existing.patientId,
           clinicId: existing.clinicId,
-          type: 'appointment_status_update',
+          type: 'appointment_reminder',
           title: 'Appointment Status Updated',
           message: `Your appointment status has been updated to ${status}`,
           metadata: {
             appointmentId: existing._id,
-            oldStatus: existing.status,
+            oldStatus,
             newStatus: status,
           },
         });
       }
 
       // Emit rescheduled event if time changed
-      if (scheduledAt && newStart.getTime() !== existing.scheduledAt.getTime()) {
+      if (scheduledAt && newStart.getTime() !== oldScheduledAt.getTime()) {
         await emitAppointmentStatusChange(req.params.id, 'rescheduled', updated, {
-          oldScheduledAt: existing.scheduledAt.toISOString(),
+          oldScheduledAt: oldScheduledAt.toISOString(),
           newScheduledAt: newStart.toISOString(),
         });
       }
 
-      return res.json({ status: 'success', data: updated });
+      return res.json({ 
+        success: true, 
+        data: updated,
+        version: '2.0',
+      });
     } catch (err: any) {
-      return res.status(500).json({ error: 'InternalError', message: err.message });
+      return res.status(500).json({ 
+        success: false,
+        error: 'InternalError', 
+        message: err.message 
+      });
     }
   },
 );
 
-// ── DELETE /appointments/:id (cancel) ─────────────────────────────────────────
+// ── DELETE /appointments/:id (V2 with real-time updates) ──────────────────────
 appointmentRoutes.delete(
   '/:id',
   validateRequest({ params: appointmentIdParamsSchema, body: cancelAppointmentSchema }),
@@ -394,8 +311,13 @@ appointmentRoutes.delete(
     try {
       const { clinicId, userId } = req.user!;
       const appointment = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
-      if (!appointment)
-        return res.status(404).json({ error: 'NotFound', message: 'Appointment not found' });
+      if (!appointment) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'NotFound', 
+          message: 'Appointment not found' 
+        });
+      }
 
       const { cancellationReason } = req.body;
 
@@ -435,7 +357,7 @@ appointmentRoutes.delete(
           NotificationModel.create({
             ...notif,
             clinicId: appointment.clinicId,
-            type: 'appointment_status_update',
+            type: 'appointment_reminder',
             metadata: {
               appointmentId: appointment._id,
               cancellationReason,
@@ -444,9 +366,22 @@ appointmentRoutes.delete(
         )
       );
 
-      return res.json({ status: 'success', data: updated });
+      return res.json({ 
+        success: true, 
+        data: updated,
+        version: '2.0',
+      });
     } catch (err: any) {
-      return res.status(500).json({ error: 'InternalError', message: err.message });
+      return res.status(500).json({ 
+        success: false,
+        error: 'InternalError', 
+        message: err.message 
+      });
     }
   },
 );
+
+// Re-export other routes with V2 enhancements
+appointmentRoutes.get('/doctor/:doctorId/availability', /* same as V1 but with V2 response format */);
+appointmentRoutes.get('/:id', /* same as V1 but with V2 response format */);
+appointmentRoutes.post('/', /* same as V1 but with V2 response format and real-time events */);

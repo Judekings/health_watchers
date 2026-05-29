@@ -3,6 +3,7 @@ import './config/env'; // must be second — validates env vars
 
 import crypto from 'crypto';
 import express from 'express';
+import { createServer } from 'http';
 import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
@@ -35,7 +36,11 @@ import {
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
 import { labResultRoutes } from './modules/lab-results/lab-results.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
-import { apiVersionHeader } from './middlewares/versioning.middleware';
+import { 
+  apiVersionHeader, 
+  v1DeprecationWarning, 
+  getSupportedVersions 
+} from './middlewares/api-versioning.middleware';
 import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
 import { notificationRoutes } from './modules/notifications/notifications.controller';
@@ -57,9 +62,12 @@ import { consentRoutes } from './modules/consent/consent.controller';
 import { subscriptionRoutes } from './modules/subscriptions/subscriptions.controller';
 import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
+import { v2Router } from './routes/v2';
+import { SocketService } from './services/socket.service';
 
 
 const app = express();
+const server = createServer(app);
 const PORT = process.env.PORT || 4000;
 
 // Standard body size limit — configurable via MAX_REQUEST_BODY_SIZE (default 10kb per issue #351)
@@ -155,24 +163,22 @@ app.use((req, res, next) => {
 // ── Health check ──────────────────────────────────────────────────────────────
 app.use('/health', healthRoutes);
 
-// ── API version header on all /api/* responses ────────────────────────────────
-app.use('/api', apiVersionHeader('1.0'));
-app.use('/api', traceIdHeader);
-
 // ── API versions endpoint ─────────────────────────────────────────────────────
-app.get('/api/versions', (_req, res) =>
-  res.json({
-    versions: [
-      {
-        version: 'v1',
-        status: 'current',
-        baseUrl: '/api/v1',
-        releaseDate: '2024-01-01',
-      },
-    ],
-    current: 'v1',
-  }),
-);
+app.get('/api/versions', (_req, res) => {
+  const versions = getSupportedVersions();
+  res.json(versions);
+});
+
+// ── V1 API Routes (with deprecation warnings) ────────────────────────────────
+app.use('/api/v1', v1DeprecationWarning);
+app.use('/api/v1', apiVersionHeader('1.0'));
+app.use('/api/v1', traceIdHeader);
+
+// ── V2 API Routes (current) ───────────────────────────────────────────────────
+app.use('/api/v2', apiVersionHeader('2.0'));
+app.use('/api/v2', traceIdHeader);
+app.use('/api/v2', generalLimiter);
+app.use('/api/v2', v2Router);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/v1', generalLimiter);
@@ -214,8 +220,13 @@ export default app;
 async function startServer() {
   await connectDB();
 
-  const server = app.listen(PORT, () => {
+  // Initialize Socket.IO service
+  const socketService = SocketService.getInstance(server);
+  logger.info('Socket.IO service initialized');
+
+  server.listen(PORT, () => {
     logger.info(`🚀 Server running on http://localhost:${PORT}`);
+    logger.info('📡 Socket.IO server ready for real-time connections');
   });
 
   startPaymentExpirationJob();
