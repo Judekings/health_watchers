@@ -21,6 +21,7 @@ import { withSpan } from '@api/utils/tracer';
 import { feeBudgetCheck } from '@api/middlewares/fee-budget-check.middleware';
 import { emitToClinic } from '@api/realtime/socket';
 import { paymentsInitiatedTotal, paymentsConfirmedTotal } from '@api/services/metrics.service';
+import { getCurrentXLMRate } from './services/xlm-rate.service';
 
 const router = Router();
 router.use(authenticate);
@@ -856,9 +857,22 @@ router.patch(
       }
     }
 
+    // Capture the exchange rate at the time of payment so receipts show an
+    // accurate USD equivalent even if the rate changes later. USDC is pegged ~1:1.
+    let exchangeRate = payment.exchangeRate;
+    if (!exchangeRate) {
+      if (payment.assetCode === 'USDC') {
+        exchangeRate = '1';
+      } else {
+        const current = await getCurrentXLMRate();
+        exchangeRate = current.rateUSD.toString();
+      }
+    }
+    const usdEquivalent = (parseFloat(payment.amount) * parseFloat(exchangeRate)).toFixed(2);
+
     const updatedPayment = await PaymentRecordModel.findByIdAndUpdate(
       payment._id,
-      { status: 'confirmed', txHash, confirmedAt: new Date() },
+      { status: 'confirmed', txHash, confirmedAt: new Date(), exchangeRate, usdEquivalent },
       { new: true }
     );
 

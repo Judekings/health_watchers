@@ -143,6 +143,32 @@ export const paymentExpirationJobConsecutiveFailures = new client.Gauge({
   registers: [register],
 });
 
+// ── XLM Exchange Rate Job Metrics ─────────────────────────────────────────────
+
+export const xlmRateFetchErrorsTotal = new client.Counter({
+  name: 'xlm_rate_fetch_errors_total',
+  help: 'Total number of XLM/USD exchange rate fetch failures',
+  registers: [register],
+});
+
+export const xlmRateLastValueUsd = new client.Gauge({
+  name: 'xlm_rate_last_value_usd',
+  help: 'Most recently fetched XLM/USD exchange rate',
+  registers: [register],
+});
+
+export const xlmRateLastFetchTimestamp = new client.Gauge({
+  name: 'xlm_rate_last_fetch_timestamp_seconds',
+  help: 'Unix timestamp (seconds) of the last successful XLM/USD rate fetch',
+  registers: [register],
+});
+
+export const xlmRateStale = new client.Gauge({
+  name: 'xlm_rate_stale',
+  help: 'Whether the cached XLM/USD rate is older than the staleness threshold (1 = stale, 0 = fresh)',
+  registers: [register],
+});
+
 // ── System Metrics ────────────────────────────────────────────────────────────
 
 export const mongodbConnectionPoolSize = new client.Gauge({
