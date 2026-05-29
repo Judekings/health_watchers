@@ -4,6 +4,7 @@ export const NOTIFICATION_TYPES = [
   'referral_received',
   'payment_confirmed',
   'appointment_reminder',
+  'appointment_status_update',
   'ai_summary_ready',
   'lab_result_ready',
   'high_risk_patient',
