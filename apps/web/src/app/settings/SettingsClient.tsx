@@ -21,6 +21,7 @@ interface MeResponse {
     mfaEnabled: boolean;
     preferences: {
       language: string;
+      theme: 'light' | 'dark' | 'system';
       emailNotifications: boolean;
       inAppNotifications: boolean;
     };
@@ -61,7 +62,7 @@ export default function SettingsClient() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-      <h1 className="mb-8 text-2xl font-bold text-neutral-900">Settings</h1>
+      <h1 className="mb-8 text-2xl font-bold text-neutral-900 dark:text-neutral-100">Settings</h1>
       <div className="flex gap-8">
         <aside className="w-48 shrink-0">
           <SubNavigation active={active} onChange={setActive} />
