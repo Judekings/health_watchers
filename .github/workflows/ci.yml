@@ -134,6 +134,15 @@ jobs:
           NODE_ENV: test
           API_PORT: 3001
 
+      - name: Verify API security headers
+        run: npm test --workspace=api -- --runInBand src/__tests__/security-headers.test.ts
+        env:
+          JWT_ACCESS_TOKEN_SECRET: test-access-secret-32-chars-long!!
+          JWT_REFRESH_TOKEN_SECRET: test-refresh-secret-32-chars-long!
+          STELLAR_NETWORK: testnet
+          NODE_ENV: test
+          API_PORT: 3001
+
       - name: Generate coverage report
         run: npm run test:coverage --workspace=api
         continue-on-error: true

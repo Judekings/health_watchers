@@ -117,6 +117,13 @@ export const aiRequestsTotal = new client.Counter({
   registers: [register],
 });
 
+export const securityHeaderViolationsTotal = new client.Counter({
+  name: 'security_header_violations_total',
+  help: 'Total number of responses missing required security headers',
+  labelNames: ['header', 'path'] as const,
+  registers: [register],
+});
+
 // ── Payment Expiration Job Metrics ────────────────────────────────────────────
 
 export const paymentExpirationJobErrorsTotal = new client.Counter({

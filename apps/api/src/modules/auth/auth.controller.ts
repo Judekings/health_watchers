@@ -120,8 +120,8 @@ router.post(
     const rawToken = crypto.randomBytes(32).toString('hex');
     user.emailVerificationTokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     await user.save();
-    await sendVerificationEmail(user.email, rawToken);
-    sendWelcomeEmail(user.email, user.fullName);
+    await sendVerificationEmail(user.email, rawToken, user.preferences?.language);
+    sendWelcomeEmail(user.email, user.fullName, user.preferences?.language);
 
     const { password: _pw, emailVerificationTokenHash: _evth, ...sanitized } = user.toObject();
     return res.status(201).json({ status: 'success', data: sanitized });
@@ -667,7 +667,7 @@ router.post(
       user.resetPasswordTokenHash = hashToken(rawToken);
       user.resetPasswordExpiresAt = new Date(Date.now() + RESET_TOKEN_EXPIRY_MS);
       await user.save();
-      await sendPasswordResetEmail(user.email, rawToken);
+      await sendPasswordResetEmail(user.email, rawToken, user.preferences?.language);
     }
     return res.json({
       status: 'success',
