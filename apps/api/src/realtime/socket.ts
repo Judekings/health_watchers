@@ -1,13 +1,26 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { verifyAccessToken } from '@api/modules/auth/token.service';
+import { verifyAccessToken, TokenPayload } from '../modules/auth/token.service';
+import { config } from '@health-watchers/config';
 
 let io: SocketIOServer | null = null;
 
+interface AuthenticatedSocket extends Socket {
+  user: TokenPayload;
+}
+
 export function initSocket(httpServer: HttpServer): SocketIOServer {
+  const allowedOrigins = config.webUrl
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: process.env.WEB_URL || 'http://localhost:3000',
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        return callback(new Error(`Socket.IO CORS: origin '${origin}' not allowed`));
+      },
       credentials: true,
     },
   });
@@ -28,12 +41,12 @@ export function initSocket(httpServer: HttpServer): SocketIOServer {
     }
 
     // Attach user info to socket for use in handlers
-    (socket as any).user = payload;
+    (socket as AuthenticatedSocket).user = payload;
     next();
   });
 
   io.on('connection', (socket: Socket) => {
-    const user = (socket as any).user;
+    const user = (socket as AuthenticatedSocket).user;
     const clinicRoom = `clinic:${user.clinicId}`;
     const userRoom = `user:${user.userId}`;
 
@@ -56,10 +69,12 @@ export function getIO(): SocketIOServer {
 
 /** Emit an event scoped to a specific clinic room */
 export function emitToClinic(clinicId: string, event: string, data: unknown): void {
-  getIO().to(`clinic:${clinicId}`).emit(event, data);
+  if (!io) return;
+  io.to(`clinic:${clinicId}`).emit(event, data);
 }
 
 /** Emit an event scoped to a specific user room */
 export function emitToUser(userId: string, event: string, data: unknown): void {
-  getIO().to(`user:${userId}`).emit(event, data);
+  if (!io) return;
+  io.to(`user:${userId}`).emit(event, data);
 }

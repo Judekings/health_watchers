@@ -10,6 +10,11 @@ import {
 import { stellarConfig } from './config.js';
 import { assertTransactionLimit } from './guards.js';
 import logger from './logger.js';
+import ResilientHorizonClient from './horizon-client.js';
+
+// Initialize resilient Horizon client
+const horizonClient = new ResilientHorizonClient(stellarConfig.horizonUrls);
+horizonClient.startHealthChecks();
 
 /**
  * Get the appropriate network passphrase using SDK constants
@@ -22,7 +27,14 @@ export function getNetworkPassphrase(): string {
  * Get Horizon server instance
  */
 export function getHorizonServer(): Horizon.Server {
-  return new Horizon.Server(stellarConfig.horizonUrl);
+  return horizonClient.getServer();
+}
+
+/**
+ * Get network status
+ */
+export async function getNetworkStatus() {
+  return horizonClient.getNetworkStatus();
 }
 
 /**
@@ -43,11 +55,11 @@ export async function fundAccount(publicKey: string, amount?: number) {
     );
 
     if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
+      const body = await response.json().catch(() => ({})) as { detail?: string };
       throw new Error(body.detail ?? `Friendbot request failed: ${response.statusText}`);
     }
 
-    const json = await response.json();
+    const json = await response.json() as { hash: string; ledger: number };
     logger.info({ publicKey }, 'Account funded successfully');
     
     return {
@@ -289,13 +301,50 @@ export async function getOrderbook(
 
 const STROOPS_PER_XLM = 10_000_000;
 
+/**
+ * Issue a refund by sending XLM from the platform account to a destination
+ */
+export async function issueRefund(toPublicKey: string, amount: string, memo: string) {
+  assertTransactionLimit(parseFloat(amount));
+
+  const server = getHorizonServer();
+  const sourceKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+  const account = await server.loadAccount(sourceKeypair.publicKey());
+  const fee = await server.fetchBaseFee();
+
+  const transaction = new TransactionBuilder(account, {
+    fee: String(fee),
+    networkPassphrase: getNetworkPassphrase(),
+  })
+    .addOperation(
+      Operation.payment({
+        destination: toPublicKey,
+        asset: Asset.native(),
+        amount,
+      })
+    )
+    .addMemo({ type: 'text', value: memo.slice(0, 28) } as any)
+    .setTimeout(300)
+    .build();
+
+  transaction.sign(sourceKeypair);
+
+  if (stellarConfig.dryRun) {
+    return { transactionHash: 'dry-run-' + transaction.hash().toString('hex'), dryRun: true };
+  }
+
+  const result = await server.submitTransaction(transaction);
+  logger.info({ hash: result.hash, to: toPublicKey, amount }, 'Refund issued');
+  return { transactionHash: result.hash };
+}
+
 function stroopsToXlm(stroops: string): string {
   return (parseInt(stroops, 10) / STROOPS_PER_XLM).toFixed(7);
 }
 
 /** Fetch fee statistics from Horizon */
 export async function getFeeStats() {
-  const server = getServer();
+  const server = getHorizonServer();
   const stats = await server.feeStats();
   const { fee_charged } = stats;
   return {
@@ -312,4 +361,109 @@ export async function getFeeStats() {
       p99:  fee_charged.p99,
     },
   };
+}
+
+/**
+ * Wrap an inner transaction XDR in a fee bump transaction signed by the platform keypair.
+ * The platform pays the fee; the inner transaction signer pays nothing.
+ */
+export async function buildFeeBumpTransaction(innerXdr: string): Promise<{
+  xdr: string;
+  hash: string;
+  feeStroops: number;
+}> {
+  if (!stellarConfig.stellarSecretKey) {
+    throw new Error('Platform secret key not configured for fee sponsorship');
+  }
+
+  const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+  const { Transaction } = await import('@stellar/stellar-sdk');
+
+  // Deserialise the inner transaction
+  const innerTx = new Transaction(innerXdr, getNetworkPassphrase());
+
+  const feeStroops = parseInt(BASE_FEE, 10) * 10; // 10× base fee for priority
+
+  const feeBumpTx = TransactionBuilder.buildFeeBumpTransaction(
+    platformKeypair,
+    String(feeStroops),
+    innerTx,
+    getNetworkPassphrase(),
+  );
+
+  feeBumpTx.sign(platformKeypair);
+
+  const xdr = feeBumpTx.toXDR();
+  const hash = feeBumpTx.hash().toString('hex');
+
+  logger.info({ hash, feeStroops }, 'Fee bump transaction built');
+
+  if (!stellarConfig.dryRun) {
+    const server = getHorizonServer();
+    await server.submitTransaction(feeBumpTx);
+  }
+
+  return { xdr, hash, feeStroops };
+}
+
+/** Check Horizon connectivity and latency */
+export async function checkHorizon(): Promise<{ status: 'healthy' | 'unhealthy'; latency?: number }> {
+  const server = getHorizonServer();
+  const start = Date.now();
+  try {
+    await server.feeStats();
+    return { status: 'healthy', latency: Date.now() - start };
+  } catch {
+    return { status: 'unhealthy', latency: Date.now() - start };
+  }
+}
+
+export interface StreamedTransaction {
+  hash: string;
+  amount: string;
+  asset: string;
+  from: string;
+  to: string;
+  type: string;
+  createdAt: string;
+}
+
+/**
+ * Stream real-time transactions for an account via Horizon SSE.
+ * Calls onTransaction for each new payment/create_account record.
+ * Returns a close() function to stop the stream.
+ */
+export function streamAccountTransactions(
+  publicKey: string,
+  onTransaction: (tx: StreamedTransaction) => void,
+  onError?: (err: unknown) => void
+): () => void {
+  const server = getHorizonServer();
+
+  logger.info({ publicKey }, 'Starting account transaction stream');
+
+  const close = server
+    .payments()
+    .forAccount(publicKey)
+    .cursor('now')
+    .stream({
+      onmessage: (record: any) => {
+        if (record.type !== 'payment' && record.type !== 'create_account') return;
+        onTransaction({
+          hash: record.transaction_hash,
+          amount: record.amount ?? record.starting_balance ?? '0',
+          asset: record.asset_type === 'native' ? 'XLM' : `${record.asset_code}:${record.asset_issuer}`,
+          from: record.from ?? record.funder ?? '',
+          to: record.to ?? record.account ?? '',
+          type: record.type,
+          createdAt: record.created_at,
+        });
+      },
+      onerror: (err: unknown) => {
+        logger.error({ err, publicKey }, 'Account transaction stream error');
+        onError?.(err);
+      },
+    });
+
+  return close as () => void;
 }

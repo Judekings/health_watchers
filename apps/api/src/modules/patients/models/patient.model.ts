@@ -15,6 +15,17 @@ export interface IAllergy {
   isActive: boolean;
 }
 
+export interface IEmergencyContact {
+  name: string;
+  relationship: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  isPrimary: boolean;
+}
+
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
 export interface Patient {
   systemId: string;
   firstName: string;
@@ -27,20 +38,50 @@ export interface Patient {
   clinicId: Schema.Types.ObjectId;
   isActive: boolean;
   allergies: IAllergy[];
+  emergencyContacts?: IEmergencyContact[];
+  riskScore?: number;
+  riskLevel?: RiskLevel;
+  riskFactors?: string[];
+  riskFactorWeights?: Record<string, number>;
+  lastRiskCalculatedAt?: Date;
+  lastSummaryGeneratedAt?: Date;
+  nextRiskReviewDate?: Date;
+  photoUrl?: string;
+  thumbnailUrl?: string;
 }
 
 const allergySchema = new Schema<IAllergy>(
   {
-    allergen:     { type: String, required: true, trim: true },
-    allergenType: { type: String, enum: ['drug', 'food', 'environmental', 'other'], required: true },
-    reaction:     { type: String, required: true },
-    severity:     { type: String, enum: ['mild', 'moderate', 'severe', 'life-threatening'], required: true },
-    onsetDate:    { type: Date },
-    recordedBy:   { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    recordedAt:   { type: Date, default: () => new Date() },
-    isActive:     { type: Boolean, default: true },
+    allergen: { type: String, required: true, trim: true },
+    allergenType: {
+      type: String,
+      enum: ['drug', 'food', 'environmental', 'other'],
+      required: true,
+    },
+    reaction: { type: String, required: true },
+    severity: {
+      type: String,
+      enum: ['mild', 'moderate', 'severe', 'life-threatening'],
+      required: true,
+    },
+    onsetDate: { type: Date },
+    recordedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    recordedAt: { type: Date, default: () => new Date() },
+    isActive: { type: Boolean, default: true },
   },
-  { _id: true },
+  { _id: true }
+);
+
+const emergencyContactSchema = new Schema<IEmergencyContact>(
+  {
+    name: { type: String, required: true, trim: true },
+    relationship: { type: String, required: true, trim: true },
+    phone: { type: String, required: true, trim: true },
+    email: { type: String, trim: true },
+    address: { type: String, trim: true },
+    isPrimary: { type: Boolean, default: false },
+  },
+  { _id: true }
 );
 
 const patientSchema = new Schema<Patient>(
@@ -52,12 +93,22 @@ const patientSchema = new Schema<Patient>(
     dateOfBirth: { type: String, required: true },
     sex: { type: String, enum: ['M', 'F', 'O'], required: true },
     contactNumber: { type: String },
-    address:       { type: String },
-    clinicId:      { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
-    isActive:      { type: Boolean, default: true, index: true },
-    allergies:     { type: [allergySchema], default: [] },
+    address: { type: String },
+    clinicId: { type: Schema.Types.ObjectId, ref: 'Clinic', required: true, index: true },
+    isActive: { type: Boolean, default: true, index: true },
+    allergies: { type: [allergySchema], default: [] },
+    emergencyContacts: { type: [emergencyContactSchema], default: [] },
+    riskScore: { type: Number, min: 0, max: 100 },
+    riskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'] },
+    riskFactors: { type: [String], default: undefined },
+    riskFactorWeights: { type: Map, of: Number, default: undefined },
+    lastRiskCalculatedAt: { type: Date },
+    lastSummaryGeneratedAt: { type: Date },
+    nextRiskReviewDate: { type: Date },
+    photoUrl: { type: String },
+    thumbnailUrl: { type: String },
   },
-  { timestamps: true, versionKey: false }
+  { timestamps: true, versionKey: false, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 patientSchema.pre('save', function () {
@@ -65,6 +116,16 @@ patientSchema.pre('save', function () {
   for (const field of PHI_FIELDS) {
     const val = this[field] as string | undefined;
     if (val) (this as unknown as Record<string, unknown>)[field] = encrypt(val);
+  }
+});
+
+patientSchema.pre('findOneAndUpdate', function () {
+  const update = this.getUpdate() as Record<string, any> | null;
+  if (!update) return;
+  const target: Record<string, unknown> = (update.$set as Record<string, unknown>) ?? update;
+  for (const field of PHI_FIELDS) {
+    const val = target[field];
+    if (typeof val === 'string') target[field] = encrypt(val);
   }
 });
 
@@ -77,6 +138,23 @@ function decryptDoc(doc: unknown) {
   }
 }
 
+function encryptUpdatePayload(update: Record<string, any>) {
+  const target = update.$set ?? update;
+  for (const field of PHI_FIELDS) {
+    if (target[field]) target[field] = encrypt(target[field]);
+  }
+}
+
+patientSchema.pre('findOneAndUpdate', function () {
+  const update = this.getUpdate() as Record<string, any>;
+  if (update) encryptUpdatePayload(update);
+});
+
+patientSchema.pre('updateMany', function () {
+  const update = this.getUpdate() as Record<string, any>;
+  if (update) encryptUpdatePayload(update);
+});
+
 patientSchema.post('save', function () {
   decryptDoc(this as unknown as Record<string, unknown>);
 });
@@ -85,5 +163,26 @@ patientSchema.post('find', function (docs: Record<string, unknown>[]) {
 });
 patientSchema.post('findOne', decryptDoc);
 patientSchema.post('findOneAndUpdate', decryptDoc);
+
+patientSchema.virtual('age').get(function () {
+  if (!this.dateOfBirth) return null;
+  const dob = new Date(this.dateOfBirth);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+});
+
+patientSchema.virtual('ageGroup').get(function () {
+  const age = (this as any).age;
+  if (age === null) return null;
+  if (age < 1) return 'infant';
+  if (age < 3) return 'toddler';
+  if (age < 12) return 'child';
+  if (age < 18) return 'adolescent';
+  if (age < 65) return 'adult';
+  return 'elderly';
+});
 
 export const PatientModel = models.Patient || model<Patient>('Patient', patientSchema);

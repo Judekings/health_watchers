@@ -17,7 +17,24 @@ export type AuditAction =
   | 'ALLERGY_DELETE'
   | 'ALLERGY_OVERRIDE'
   | 'KEYPAIR_CREATE'
-  | 'KEYPAIR_ROTATE';
+  | 'KEYPAIR_ROTATE'
+  | 'DISPUTE_OPENED'
+  | 'DISPUTE_RESOLVED'
+  | 'REFUND_ISSUED'
+  | 'IMMUNIZATION_CREATE'
+  | 'IMMUNIZATION_UPDATE'
+  | 'IMMUNIZATION_DELETE'
+  | 'IMMUNIZATION_CERTIFICATE'
+  | 'PATIENT_PHOTO_UPLOAD'
+  | 'PATIENT_PHOTO_ACCESS'
+  | 'PATIENT_PHOTO_DELETE'
+  | 'PAYMENT_EXPORT'
+  | 'DOSAGE_CALCULATION'
+  | 'CRITICAL_LAB_RESULT'
+  | 'CRITICAL_LAB_ACKNOWLEDGED'
+  | 'CLINIC_SWITCH'
+  | 'DATA_EXPORT_REQUEST'
+  | 'DATA_EXPORT_FULFILLED';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -27,8 +44,9 @@ export interface AuditLog {
   resourceId?: string;
   ipAddress?: string;
   userAgent?: string;
+  requestId?: string;
   outcome: 'SUCCESS' | 'FAILURE';
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   timestamp: Date;
 }
 
@@ -57,6 +75,23 @@ const auditLogSchema = new Schema<AuditLog>(
         'ALLERGY_OVERRIDE',
         'KEYPAIR_CREATE',
         'KEYPAIR_ROTATE',
+        'DISPUTE_OPENED',
+        'DISPUTE_RESOLVED',
+        'REFUND_ISSUED',
+        'IMMUNIZATION_CREATE',
+        'IMMUNIZATION_UPDATE',
+        'IMMUNIZATION_DELETE',
+        'IMMUNIZATION_CERTIFICATE',
+        'PATIENT_PHOTO_UPLOAD',
+        'PATIENT_PHOTO_ACCESS',
+        'PATIENT_PHOTO_DELETE',
+        'PAYMENT_EXPORT',
+        'DOSAGE_CALCULATION',
+        'CRITICAL_LAB_RESULT',
+        'CRITICAL_LAB_ACKNOWLEDGED',
+        'CLINIC_SWITCH',
+        'DATA_EXPORT_REQUEST',
+        'DATA_EXPORT_FULFILLED',
       ],
       index: true,
     },
@@ -64,6 +99,7 @@ const auditLogSchema = new Schema<AuditLog>(
     resourceId: { type: String, required: false, index: true },
     ipAddress: { type: String, required: false },
     userAgent: { type: String, required: false },
+    requestId: { type: String, required: false, index: true },
     outcome: { type: String, enum: ['SUCCESS', 'FAILURE'], required: true, default: 'SUCCESS' },
     metadata: { type: Schema.Types.Mixed, required: false },
     timestamp: { type: Date, required: true, default: () => new Date(), index: true },
@@ -72,7 +108,7 @@ const auditLogSchema = new Schema<AuditLog>(
     timestamps: false,
     versionKey: false,
     collection: 'audit_logs',
-  }
+  },
 );
 
 // Prevent updates and deletes - immutable logs
@@ -97,5 +133,10 @@ auditLogSchema.index({ timestamp: -1 });
 auditLogSchema.index({ userId: 1, timestamp: -1 });
 auditLogSchema.index({ clinicId: 1, timestamp: -1 });
 auditLogSchema.index({ action: 1, timestamp: -1 });
+auditLogSchema.index({ outcome: 1, timestamp: -1 });
+auditLogSchema.index({ resourceType: 1, timestamp: -1 });
+auditLogSchema.index({ ipAddress: 1, timestamp: -1 });
+// Full-text search across action field (metadata is Mixed so not indexable as text)
+auditLogSchema.index({ action: 'text' }, { name: 'audit_text_search' });
 
 export const AuditLogModel = models.AuditLog || model<AuditLog>('AuditLog', auditLogSchema);

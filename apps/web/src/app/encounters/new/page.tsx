@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { Input, Button, Textarea } from '@/components/ui';
+import { Input, Button, Textarea, Badge } from '@/components/ui';
 import { API_V1 } from '@/lib/api';
 import { formatDate } from '@health-watchers/types';
+import DosageCalculatorModal from '@/components/encounters/DosageCalculatorModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,10 @@ interface PatientHit {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
+}
+
+interface FullPatient extends PatientHit {
+  sex: 'M' | 'F' | 'O';
 }
 
 interface DiagnosisEntry {
@@ -35,6 +40,21 @@ interface EncounterTemplate {
   suggestedTests?: string[];
   notes?: string;
   usageCount: number;
+}
+
+interface AiDifferential {
+  diagnosis: string;
+  icdCode: string;
+  probability: 'high' | 'medium' | 'low';
+  reasoning: string;
+  recommendedTests: string[];
+}
+
+interface AiResponse {
+  success: boolean;
+  differentials: AiDifferential[];
+  urgency: 'routine' | 'urgent' | 'emergency';
+  disclaimer: string;
 }
 
 // ─── ICD-10 local mini-list (fallback when no API) ────────────────────────────
@@ -116,19 +136,70 @@ export default function NewEncounterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [patientAllergies, setPatientAllergies] = useState<Array<{ _id: string; allergen: string; severity: string; reaction: string }>>([]);
 
-  // Templates
-  const [templates, setTemplates] = useState<EncounterTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  const [previewTemplate, setPreviewTemplate] = useState<EncounterTemplate | null>(null);
+  // AI Suggestions
+  const [aiSuggestions, setAiSuggestions] = useState<AiResponse | null>(null);
+  const [fetchingAi, setFetchingAi] = useState(false);
+  const [fullPatient, setFullPatient] = useState<FullPatient | null>(null);
 
-  useEffect(() => {
-    fetch(`${API_V1}/encounter-templates`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.data) setTemplates(d.data); })
-      .catch(() => {});
+  // Prescriptions
+  interface PrescriptionRow {
+    id: number;
+    drugName: string;
+    dosage: string;
+    frequency: string;
+    route: string;
+    duration: string;
+  }
+  const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>([]);
+  const [dosageModalOpen, setDosageModalOpen] = useState(false);
+  const [activePrescriptionId, setActivePrescriptionId] = useState<number | null>(null);
+  const nextPrescriptionId = useRef(1);
+
+  function addPrescriptionRow() {
+    setPrescriptions((prev) => [
+      ...prev,
+      { id: nextPrescriptionId.current++, drugName: '', dosage: '', frequency: '', route: 'oral', duration: '' },
+    ]);
+  }
+
+  function removePrescriptionRow(id: number) {
+    setPrescriptions((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  function updatePrescriptionRow(id: number, field: keyof PrescriptionRow, value: string) {
+    setPrescriptions((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  }
+
+  function openDosageCalculator(id: number) {
+    setActivePrescriptionId(id);
+    setDosageModalOpen(true);
+  }
+
+  function applyDosageResult(dose: string, frequency: string, route: string) {
+    if (activePrescriptionId === null) return;
+    setPrescriptions((prev) =>
+      prev.map((r) =>
+        r.id === activePrescriptionId ? { ...r, dosage: dose, frequency, route } : r
+      )
+    );
+  }
+
+  // Fetch full patient data when selected
+  const fetchFullPatient = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`${API_V1}/patients/${id}`);
+      const data = await res.json();
+      if (data.success) setFullPatient(data.data);
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  // Effect to fetch prefilled patient
+  useState(() => {
+    if (prefilledPatientId) fetchFullPatient(prefilledPatientId);
+  });
 
   // ── Patient search ──────────────────────────────────────────────────────────
 
@@ -173,27 +244,6 @@ export default function NewEncounterPage() {
   const removeDiagnosis = (code: string) =>
     setDiagnoses((prev) => prev.filter((d) => d.code !== code));
 
-  // ── Template application ────────────────────────────────────────────────────
-
-  const applyTemplate = (t: EncounterTemplate) => {
-    if (t.defaultChiefComplaint && !chiefComplaint) setChiefComplaint(t.defaultChiefComplaint);
-    if (t.notes && !notes) setNotes(t.notes);
-    if (t.defaultVitalSigns) {
-      const vs = t.defaultVitalSigns as Record<string, string>;
-      if (vs.bloodPressure && !bp) setBp(vs.bloodPressure);
-      if (vs.heartRate && !hr) setHr(String(vs.heartRate));
-      if (vs.temperature && !temp) setTemp(String(vs.temperature));
-      if (vs.oxygenSaturation && !spo2) setSpo2(String(vs.oxygenSaturation));
-      if (vs.weight && !weight) setWeight(String(vs.weight));
-      if (vs.height && !height) setHeight(String(vs.height));
-    }
-    if (t.suggestedDiagnoses?.length && diagnoses.length === 0) {
-      setDiagnoses(t.suggestedDiagnoses.map((d, i) => ({ ...d, isPrimary: i === 0 })));
-    }
-    setSelectedTemplateId(t._id);
-    setPreviewTemplate(null);
-  };
-
   // ── Vitals conversion ───────────────────────────────────────────────────────
 
   function toC(val: string) {
@@ -226,6 +276,67 @@ export default function NewEncounterPage() {
     return Object.keys(e).length === 0;
   }
 
+  // ── AI Suggestions ─────────────────────────────────────────────────────────
+
+  async function getAiSuggestions() {
+    if (!chiefComplaint.trim()) {
+      setErrors((prev) => ({ ...prev, chiefComplaint: 'Enter a chief complaint first' }));
+      return;
+    }
+
+    const patientId = selectedPatient?._id ?? prefilledPatientId;
+    if (!patientId) {
+      setErrors((prev) => ({ ...prev, patient: 'Select a patient first' }));
+      return;
+    }
+
+    setFetchingAi(true);
+    setAiSuggestions(null);
+    setSubmitError('');
+
+    try {
+      // Extract symptoms from notes (simple comma split for now)
+      const symptoms = notes
+        .split(/[,\n]/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 2);
+
+      const vitalSigns: Record<string, number | string> = {};
+      if (bp) vitalSigns.bloodPressure = bp;
+      if (hr) vitalSigns.heartRate = parseFloat(hr);
+      if (temp) vitalSigns.temperature = parseFloat(toC(temp).toFixed(1));
+      if (spo2) vitalSigns.oxygenSaturation = parseFloat(spo2);
+
+      const age = fullPatient?.dateOfBirth ? calcAge(fullPatient.dateOfBirth) : undefined;
+
+      const res = await fetch(`${API_V1.replace('/api/v1', '')}/api/v1/ai/differential-diagnosis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chiefComplaint: chiefComplaint.trim(),
+          symptoms: symptoms.length > 0 ? symptoms : [chiefComplaint.trim()],
+          vitalSigns: Object.keys(vitalSigns).length > 0 ? vitalSigns : undefined,
+          patientAge: age,
+          patientSex: fullPatient?.sex,
+          relevantHistory: notes.slice(0, 500), // simplistic history extraction
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? 'Failed to get suggestions');
+      setAiSuggestions(data);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'AI suggestion failed');
+    } finally {
+      setFetchingAi(false);
+    }
+  }
+
+  function calcAge(dob: string): number {
+    const diff = Date.now() - new Date(dob).getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+  }
+
   // ── Submit ──────────────────────────────────────────────────────────────────
 
   async function submit(status: 'open' | 'closed') {
@@ -255,12 +366,26 @@ export default function NewEncounterPage() {
       ...(diagnoses.length > 0 && { diagnosis: diagnoses }),
       ...(Object.keys(vitalSigns).length > 0 && { vitalSigns }),
       ...(followUpDate && { followUpDate: new Date(followUpDate).toISOString() }),
+      ...(prescriptions.filter((r) => r.drugName.trim()).length > 0 && {
+        prescriptions: prescriptions
+          .filter((r) => r.drugName.trim())
+          .map((r) => ({
+            drugName: r.drugName.trim(),
+            dosage: r.dosage.trim() || 'As directed',
+            frequency: r.frequency.trim() || 'As directed',
+            route: r.route || 'oral',
+            duration: r.duration.trim() || 'As directed',
+            prescribedBy: user.userId,
+            prescribedAt: new Date().toISOString(),
+            refillsAllowed: 0,
+          })),
+      }),
     };
 
     setSubmitting(true);
     setSubmitError('');
     try {
-      const res = await fetch(`${API_V1}/encounters${selectedTemplateId ? `?templateId=${selectedTemplateId}` : ''}`, {
+      const res = await fetch(`${API_V1}/encounters`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -336,8 +461,11 @@ export default function NewEncounterPage() {
               </div>
               <button
                 type="button"
-                onClick={() => { setSelectedPatient(null); setPatientQuery(''); setPatientAllergies([]); }}
-                className="text-xs text-primary-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+                onClick={() => {
+                  setSelectedPatient(null);
+                  setPatientQuery('');
+                }}
+                className="text-primary-600 focus-visible:ring-primary-500 rounded text-xs hover:underline focus:outline-none focus-visible:ring-2"
               >
                 Change
               </button>
@@ -370,7 +498,7 @@ export default function NewEncounterPage() {
                   className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-lg"
                 >
                   {patientSearching && (
-                    <li className="px-4 py-2 text-sm text-neutral-500">Searching…</li>
+                    <li className="px-4 py-2 text-sm text-neutral-400">Searching…</li>
                   )}
                   {patientHits.map((p) => (
                     <li
@@ -379,16 +507,25 @@ export default function NewEncounterPage() {
                       aria-selected={false}
                       className="hover:bg-primary-50 focus:bg-primary-50 cursor-pointer px-4 py-2 text-sm outline-none"
                       tabIndex={0}
-                      onClick={() => { setSelectedPatient(p); setPatientHits([]); setPatientQuery('');
-                        fetch(`${API_V1}/patients/${p._id}/allergies`).then(r => r.json()).then(d => setPatientAllergies(d.data ?? [])).catch(() => {});
+                      onClick={() => {
+                        setSelectedPatient(p);
+                        fetchFullPatient(p._id);
+                        setPatientHits([]);
+                        setPatientQuery('');
                       }}
-                      onKeyDown={e => e.key === 'Enter' && (setSelectedPatient(p), setPatientHits([]), setPatientQuery(''),
-                        fetch(`${API_V1}/patients/${p._id}/allergies`).then(r => r.json()).then(d => setPatientAllergies(d.data ?? [])).catch(() => {}))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          setSelectedPatient(p);
+                          fetchFullPatient(p._id);
+                          setPatientHits([]);
+                          setPatientQuery('');
+                        }
+                      }}
                     >
                       <span className="font-medium">
                         {p.firstName} {p.lastName}
                       </span>
-                      <span className="ml-2 text-xs text-neutral-500">
+                      <span className="ml-2 text-xs text-neutral-400">
                         {p.systemId} · {formatDate(p.dateOfBirth)}
                       </span>
                     </li>
@@ -398,103 +535,6 @@ export default function NewEncounterPage() {
             </div>
           )}
         </section>
-
-        {/* ── Template Selector ── */}
-        {templates.length > 0 && (
-          <section aria-labelledby="section-template">
-            <h2 id="section-template" className="text-sm font-semibold uppercase tracking-wide text-neutral-500 mb-3">
-              Start from Template <span className="font-normal normal-case text-neutral-400">(optional)</span>
-            </h2>
-
-            {selectedTemplateId ? (
-              <div className="flex items-center justify-between rounded-lg border border-primary-200 bg-primary-50 px-4 py-3">
-                <p className="text-sm font-medium text-neutral-900">
-                  {templates.find(t => t._id === selectedTemplateId)?.name}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setSelectedTemplateId('')}
-                  className="text-xs text-primary-600 hover:underline focus:outline-none"
-                >
-                  Remove
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {templates.map(t => (
-                  <div key={t._id} className="rounded-lg border border-neutral-200 bg-white p-3 flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-neutral-900 truncate">{t.name}</p>
-                      <p className="text-xs text-neutral-400">{t.category}{t.usageCount > 0 ? ` · used ${t.usageCount}×` : ''}</p>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewTemplate(previewTemplate?._id === t._id ? null : t)}
-                        className="text-xs text-neutral-500 hover:text-neutral-800 focus:outline-none px-2 py-1 rounded border border-neutral-200 hover:bg-neutral-50"
-                        aria-expanded={previewTemplate?._id === t._id}
-                      >
-                        Preview
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applyTemplate(t)}
-                        className="text-xs text-primary-600 hover:text-primary-800 focus:outline-none px-2 py-1 rounded border border-primary-200 hover:bg-primary-50"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {previewTemplate && (
-              <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm space-y-2">
-                <p className="font-semibold text-neutral-800">{previewTemplate.name}</p>
-                {previewTemplate.description && <p className="text-neutral-600">{previewTemplate.description}</p>}
-                {previewTemplate.defaultChiefComplaint && (
-                  <p className="text-neutral-600"><span className="font-medium">Chief complaint:</span> {previewTemplate.defaultChiefComplaint}</p>
-                )}
-                {previewTemplate.suggestedDiagnoses?.length ? (
-                  <p className="text-neutral-600">
-                    <span className="font-medium">Diagnoses:</span>{' '}
-                    {previewTemplate.suggestedDiagnoses.map(d => d.code).join(', ')}
-                  </p>
-                ) : null}
-                {previewTemplate.suggestedTests?.length ? (
-                  <p className="text-neutral-600">
-                    <span className="font-medium">Tests:</span>{' '}
-                    {previewTemplate.suggestedTests.join(', ')}
-                  </p>
-                ) : null}
-                {previewTemplate.notes && <p className="text-neutral-600"><span className="font-medium">Notes:</span> {previewTemplate.notes}</p>}
-                <button
-                  type="button"
-                  onClick={() => applyTemplate(previewTemplate)}
-                  className="mt-1 text-xs font-medium text-primary-600 hover:underline focus:outline-none"
-                >
-                  Apply this template →
-                </button>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* ── Allergy Alert ── */}
-        {patientAllergies.length > 0 && (
-          <div role="alert" aria-live="assertive" className="rounded-lg border border-danger-300 bg-danger-50 px-4 py-3">
-            <p className="text-sm font-semibold text-danger-800 mb-2">⚠ Known Allergies</p>
-            <ul className="space-y-1">
-              {patientAllergies.map((a) => (
-                <li key={a._id} className="text-sm text-danger-700">
-                  <span className="font-medium">{a.allergen}</span>
-                  {' '}— {a.severity} · {a.reaction}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
 
         {/* ── Chief Complaint ── */}
         <section aria-labelledby="section-complaint">
@@ -514,10 +554,108 @@ export default function NewEncounterPage() {
               placeholder="Describe the primary reason for this visit…"
               error={errors.chiefComplaint}
             />
-            <span className="absolute right-3 bottom-2 text-xs text-neutral-500" aria-live="polite">
+            <span className="absolute right-3 bottom-2 text-xs text-neutral-400" aria-live="polite">
               {chiefComplaint.length}/500
             </span>
           </div>
+
+          <div className="mt-3">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={getAiSuggestions}
+              loading={fetchingAi}
+              disabled={fetchingAi || !chiefComplaint.trim()}
+              className="border-blue-200 text-blue-700 hover:bg-blue-50"
+            >
+              <span className="mr-2">✨</span>
+              Get AI Suggestions
+            </Button>
+          </div>
+
+          {/* AI Suggestions Panel */}
+          {aiSuggestions && (
+            <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-5 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold tracking-widest text-white uppercase">
+                    Differential Diagnosis AI
+                  </span>
+                  <Badge
+                    variant={
+                      aiSuggestions.urgency === 'emergency'
+                        ? 'danger'
+                        : aiSuggestions.urgency === 'urgent'
+                          ? 'warning'
+                          : 'success'
+                    }
+                  >
+                    {aiSuggestions.urgency} urgency
+                  </Badge>
+                </div>
+                <button
+                  onClick={() => setAiSuggestions(null)}
+                  className="text-neutral-400 hover:text-neutral-600"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {aiSuggestions.differentials.map((diff, i) => (
+                  <div key={i} className="rounded-lg border border-blue-100 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-neutral-900">{diff.diagnosis}</h3>
+                          <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500">
+                            {diff.icdCode}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-neutral-600 leading-relaxed">
+                          {diff.reasoning}
+                        </p>
+                        {diff.recommendedTests?.length > 0 && (
+                          <p className="mt-2 text-[10px] text-neutral-400">
+                            Recommended: {diff.recommendedTests.join(', ')}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            diff.probability === 'high'
+                              ? 'bg-red-50 text-red-700'
+                              : diff.probability === 'medium'
+                                ? 'bg-orange-50 text-orange-700'
+                                : 'bg-green-50 text-green-700'
+                          }`}
+                        >
+                          {diff.probability} probability
+                        </span>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={() =>
+                            addDiagnosis({
+                              code: diff.icdCode,
+                              description: diff.diagnosis,
+                              isPrimary: diagnoses.length === 0,
+                            })
+                          }
+                          disabled={diagnoses.some((d) => d.code === diff.icdCode)}
+                        >
+                          {diagnoses.some((d) => d.code === diff.icdCode) ? 'Added' : 'Add Diagnosis'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <p className="mt-4 text-[10px] italic text-neutral-400">{aiSuggestions.disclaimer}</p>
+            </div>
+          )}
         </section>
 
         {/* ── Vital Signs (collapsible) ── */}
@@ -532,7 +670,7 @@ export default function NewEncounterPage() {
           >
             <span>
               Vital Signs{' '}
-              <span className="font-normal text-neutral-500 normal-case">(optional)</span>
+              <span className="font-normal text-neutral-400 normal-case">(optional)</span>
             </span>
             <span aria-hidden="true">{vitalsOpen ? '▲' : '▼'}</span>
           </button>
@@ -657,7 +795,7 @@ export default function NewEncounterPage() {
               placeholder="Clinical observations, history, examination findings…"
               error={errors.notes}
             />
-            <span className="absolute right-3 bottom-2 text-xs text-neutral-500" aria-live="polite">
+            <span className="absolute right-3 bottom-2 text-xs text-neutral-400" aria-live="polite">
               {notes.length}/10,000
             </span>
           </div>
@@ -670,7 +808,7 @@ export default function NewEncounterPage() {
             className="mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase"
           >
             Diagnosis (ICD-10){' '}
-            <span className="font-normal text-neutral-500 normal-case">— up to 10</span>
+            <span className="font-normal text-neutral-400 normal-case">— up to 10</span>
           </h2>
 
           {diagnoses.length > 0 && (
@@ -683,13 +821,13 @@ export default function NewEncounterPage() {
                   <span>
                     <span className="text-primary-700 font-mono font-medium">{d.code}</span>
                     <span className="ml-2 text-neutral-700">{d.description}</span>
-                    {i === 0 && <span className="ml-2 text-xs text-neutral-500">(primary)</span>}
+                    {i === 0 && <span className="ml-2 text-xs text-neutral-400">(primary)</span>}
                   </span>
                   <button
                     type="button"
                     onClick={() => removeDiagnosis(d.code)}
                     aria-label={`Remove ${d.code}`}
-                    className="hover:text-danger-500 focus-visible:ring-primary-500 ml-3 rounded text-neutral-500 focus:outline-none focus-visible:ring-2"
+                    className="hover:text-danger-500 focus-visible:ring-primary-500 ml-3 rounded text-neutral-400 focus:outline-none focus-visible:ring-2"
                   >
                     ✕
                   </button>
@@ -735,6 +873,127 @@ export default function NewEncounterPage() {
               )}
             </div>
           )}
+        </section>
+
+        {/* ── Prescriptions ── */}
+        <section aria-labelledby="section-rx">
+          <div className="mb-3 flex items-center justify-between">
+            <h2
+              id="section-rx"
+              className="text-sm font-semibold tracking-wide text-neutral-500 uppercase"
+            >
+              Prescriptions{' '}
+              <span className="font-normal text-neutral-400 normal-case">(optional)</span>
+            </h2>
+            <Button size="sm" variant="outline" onClick={addPrescriptionRow}>
+              + Add Medication
+            </Button>
+          </div>
+
+          {prescriptions.length === 0 && (
+            <p className="rounded-lg border border-dashed border-neutral-200 px-4 py-6 text-center text-sm text-neutral-400">
+              No prescriptions added. Click &ldquo;Add Medication&rdquo; to start.
+            </p>
+          )}
+
+          <div className="space-y-3">
+            {prescriptions.map((rx) => (
+              <div
+                key={rx.id}
+                className="rounded-lg border border-neutral-200 bg-neutral-50 p-4"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-xs font-medium text-neutral-500">Medication</span>
+                  <button
+                    type="button"
+                    onClick={() => removePrescriptionRow(rx.id)}
+                    aria-label="Remove prescription"
+                    className="text-xs text-neutral-400 hover:text-red-500"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {/* Drug name + Calculate Dose button */}
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                      Drug Name *
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        value={rx.drugName}
+                        onChange={(e) => updatePrescriptionRow(rx.id, 'drugName', e.target.value)}
+                        placeholder="e.g. Amoxicillin"
+                        className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => openDosageCalculator(rx.id)}
+                        title="AI Dosage Calculator"
+                        className="flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 whitespace-nowrap"
+                      >
+                        <span aria-hidden="true">✨</span> Calculate Dose
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                      Dosage
+                    </label>
+                    <input
+                      value={rx.dosage}
+                      onChange={(e) => updatePrescriptionRow(rx.id, 'dosage', e.target.value)}
+                      placeholder="e.g. 500 mg"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                      Frequency
+                    </label>
+                    <input
+                      value={rx.frequency}
+                      onChange={(e) => updatePrescriptionRow(rx.id, 'frequency', e.target.value)}
+                      placeholder="e.g. every 8 hours"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                      Route
+                    </label>
+                    <select
+                      value={rx.route}
+                      onChange={(e) => updatePrescriptionRow(rx.id, 'route', e.target.value)}
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="oral">Oral</option>
+                      <option value="injection">Injection</option>
+                      <option value="topical">Topical</option>
+                      <option value="inhaled">Inhaled</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-neutral-700">
+                      Duration
+                    </label>
+                    <input
+                      value={rx.duration}
+                      onChange={(e) => updatePrescriptionRow(rx.id, 'duration', e.target.value)}
+                      placeholder="e.g. 7 days"
+                      className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         {/* ── Follow-up Date ── */}
@@ -784,6 +1043,21 @@ export default function NewEncounterPage() {
           </Link>
         </div>
       </div>
+
+      {/* ── Dosage Calculator Modal ── */}
+      <DosageCalculatorModal
+        open={dosageModalOpen}
+        onClose={() => setDosageModalOpen(false)}
+        initialDrugName={
+          activePrescriptionId !== null
+            ? (prescriptions.find((r) => r.id === activePrescriptionId)?.drugName ?? '')
+            : ''
+        }
+        onApply={applyDosageResult}
+        patientWeight={weight ? toKg(weight) : undefined}
+        patientAge={fullPatient?.dateOfBirth ? calcAge(fullPatient.dateOfBirth) : undefined}
+        patientSex={fullPatient?.sex === 'M' || fullPatient?.sex === 'F' ? fullPatient.sex : undefined}
+      />
     </main>
   );
 }

@@ -2,13 +2,21 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ErrorMessage, Toast, SlideOver, PageWrapper, PageHeader } from '@/components/ui';
+import {
+  ErrorMessage,
+  Toast,
+  SlideOver,
+  PageWrapper,
+  PageHeader,
+  SectionErrorBoundary,
+} from '@/components/ui';
 import { PaymentTable, type Payment } from '@/components/payments/PaymentTable';
 import { PaymentIntentForm, type PaymentIntentData } from '@/components/forms/PaymentIntentForm';
 import { Button } from '@/components/ui/Button';
 import { queryKeys } from '@/lib/queryKeys';
 import { fetchWithAuth } from '@/lib/auth';
 import { API_URL } from '@/lib/api';
+import { PaymentExportButton } from '@/components/payments/PaymentExportButton';
 
 const API = `${API_URL}/api/v1`;
 const NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? 'testnet';
@@ -119,6 +127,7 @@ export default function PaymentsClient() {
             </span>
           )}
           <Button variant="outline" onClick={() => window.location.href = '/invoices'}>Invoices</Button>
+          <PaymentExportButton onError={(msg) => setToast({ message: msg, type: 'error' })} />
           <Button onClick={() => setShowForm(true)}>+ New Payment</Button>
         </div>
       </div>
@@ -147,7 +156,9 @@ export default function PaymentsClient() {
       )}
 
       {!isLoading && !error && (
-        <PaymentTable payments={displayPayments} network={NETWORK} onConfirm={handleConfirm} />
+        <SectionErrorBoundary name="payment panel">
+          <PaymentTable payments={displayPayments} network={NETWORK} onConfirm={handleConfirm} />
+        </SectionErrorBoundary>
       )}
 
       <SlideOver isOpen={showForm} onClose={() => setShowForm(false)} title="New Payment Intent">

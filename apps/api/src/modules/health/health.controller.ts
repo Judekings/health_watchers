@@ -4,45 +4,83 @@ import { cache } from '../../services/cache.service';
 import { stellarClient } from '../payments/services/stellar-client';
 import { isAIServiceAvailable } from '../ai/ai.service';
 import { config } from '@health-watchers/config';
+import { getDbStatus } from '../../config/db';
+import { getJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-expiration-job';
 
 const router = Router();
 
-// GET /health/live - Liveness check (Fast)
+/**
+ * GET /health/live - Fast liveness check
+ */
 router.get('/live', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'alive',
-    uptime: process.uptime(),
+    service: 'health-watchers-api',
+    database: getDbStatus(),
+    uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
   });
 });
 
-// GET /health/ready - Readiness check (Comprehensive)
+/**
+ * GET /health/ready - Comprehensive readiness check
+ */
 router.get('/ready', async (req: Request, res: Response) => {
   const checks: Record<string, any> = {};
   let isReady = true;
 
-  // 1. MongoDB Check (Critical)
+  // 1. MongoDB Check (CRITICAL)
   const mongoStart = Date.now();
   try {
     const mongoStatus = mongoose.connection.readyState;
     // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
     if (mongoStatus === 1) {
-      await mongoose.connection.db.admin().ping();
-      checks.mongodb = { status: 'healthy', latency: Date.now() - mongoStart };
+      // Perform a simple ping if connected
+      await mongoose.connection.db?.admin().ping();
+      const pool = mongoose.connection.pool;
+      const totalConnections = pool?.totalConnectionCount ?? 0;
+      const waitQueueSize = pool?.waitQueueSize ?? 0;
+      const maxPoolSize = parseInt(process.env.MONGODB_POOL_SIZE ?? '10', 10);
+      const utilization = maxPoolSize > 0 ? totalConnections / maxPoolSize : 0;
+      const poolExhausted = waitQueueSize > 0 && totalConnections >= maxPoolSize;
+
+      if (poolExhausted) {
+        isReady = false;
+        checks.mongodb = {
+          status: 'unhealthy',
+          message: 'Connection pool exhausted',
+          pool: { totalConnections, waitQueueSize, maxPoolSize, utilization },
+          latency: Date.now() - mongoStart,
+        };
+      } else {
+        checks.mongodb = {
+          status: 'healthy',
+          pool: { totalConnections, waitQueueSize, maxPoolSize, utilization },
+          latency: Date.now() - mongoStart,
+        };
+      }
     } else {
       isReady = false;
-      checks.mongodb = { status: 'unhealthy', message: `Mongoose state: ${mongoStatus}` };
+      checks.mongodb = { 
+        status: 'unhealthy', 
+        message: `Mongoose readyState: ${mongoStatus}`,
+        latency: Date.now() - mongoStart 
+      };
     }
   } catch (err) {
     isReady = false;
-    checks.mongodb = { status: 'unhealthy', message: err instanceof Error ? err.message : 'Unknown error' };
+    checks.mongodb = { 
+      status: 'unhealthy', 
+      message: err instanceof Error ? err.message : 'Unknown error',
+      latency: Date.now() - mongoStart 
+    };
   }
 
-  // 2. Redis Check (Optional - degraded if fails)
+  // 2. Redis Check (OPTIONAL - degraded if fails)
   const redisHealth = await cache.ping();
   checks.redis = redisHealth;
 
-  // 3. Stellar Horizon Check (Optional - degraded if fails)
+  // 3. Stellar Horizon Check (OPTIONAL - degraded if fails)
   const stellarStart = Date.now();
   try {
     const stellarHealth = await stellarClient.healthCheck();
@@ -52,10 +90,14 @@ router.get('/ready', async (req: Request, res: Response) => {
       network: stellarHealth.network,
     };
   } catch (err) {
-    checks.stellarHorizon = { status: 'degraded', message: err instanceof Error ? err.message : 'Unknown error' };
+    checks.stellarHorizon = { 
+      status: 'degraded', 
+      message: err instanceof Error ? err.message : 'Connection failed',
+      latency: Date.now() - stellarStart 
+    };
   }
 
-  // 4. Gemini API Check (Optional - degraded if fails)
+  // 4. Gemini API Check (OPTIONAL - degraded if fails)
   const hasGemini = isAIServiceAvailable();
   checks.geminiApi = {
     status: hasGemini ? 'healthy' : 'degraded',
@@ -71,6 +113,38 @@ router.get('/ready', async (req: Request, res: Response) => {
   };
 
   res.status(isReady ? 200 : 503).json(response);
+});
+
+/**
+ * GET /health/jobs - Background job health status
+ */
+router.get('/jobs', (_req: Request, res: Response) => {
+  const expiration = getJobStatus();
+  const intervalSeconds = CHECK_INTERVAL_MS / 1000;
+  const stalledThresholdSeconds = intervalSeconds * 2;
+
+  const isStalled =
+    expiration.running &&
+    expiration.lastSuccessfulRunAt !== null &&
+    (Date.now() - expiration.lastSuccessfulRunAt.getTime()) / 1000 > stalledThresholdSeconds;
+
+  const neverRan = expiration.running && expiration.lastSuccessfulRunAt === null;
+
+  return res.status(200).json({
+    status: isStalled ? 'degraded' : 'healthy',
+    jobs: {
+      paymentExpiration: {
+        running: expiration.running,
+        lastSuccessfulRunAt: expiration.lastSuccessfulRunAt?.toISOString() ?? null,
+        consecutiveFailures: expiration.consecutiveFailures,
+        intervalSeconds,
+        stalledThresholdSeconds,
+        stalled: isStalled,
+        neverRan,
+      },
+    },
+    timestamp: new Date().toISOString(),
+  });
 });
 
 export const healthRoutes = router;

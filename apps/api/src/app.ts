@@ -15,12 +15,17 @@ import { authRoutes } from './modules/auth/auth.controller';
 import { userRoutes } from './modules/users/users.controller';
 import { userManagementRoutes } from './modules/users/user-management.controller';
 import { patientRoutes } from './modules/patients/patients.controller';
+import { medicalHistoryRoutes } from './modules/patients/medical-history.controller';
+import { patientPhotoRoutes } from './modules/patients/photo.controller';
 import { encounterRoutes } from './modules/encounters/encounters.controller';
 import { encounterTemplateRoutes } from './modules/encounters/encounter-templates.controller';
-import { paymentRoutes } from './modules/payments/payments.controller';
+import paymentsRouter from './modules/payments/payments.routes';
+import { reimbursementRoutes } from './modules/payments/reimbursement.controller';
 import { clinicRoutes } from './modules/clinics/clinics.controller';
 import { webhookRoutes } from './modules/webhooks/webhooks.controller';
 import { auditLogRoutes } from './modules/audit/audit-logs.controller';
+import { auditRoutes } from './modules/audit/audit.controller';
+import { initSocket } from './realtime/socket';
 import aiRoutes from './modules/ai/ai.routes';
 import { healthRoutes } from './modules/health/health.controller';
 import { setupSwagger } from './docs/swagger';
@@ -32,8 +37,12 @@ import {
   aiLimiter,
   paymentLimiter,
   generalLimiter,
+  bulkExportLimiter,
+  patientSearchLimiter,
+  reportGenerationLimiter,
 } from './middlewares/rate-limit.middleware';
 import { appointmentRoutes } from './modules/appointments/appointments.controller';
+import { waitlistRoutes } from './modules/appointments/waitlist.controller';
 import { labResultRoutes } from './modules/lab-results/lab-results.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
 import { 
@@ -54,16 +63,58 @@ import {
   startReconciliationJob,
   stopReconciliationJob,
 } from './modules/payments/services/reconciliation-job';
+import {
+  startRiskRecalculationJob,
+  stopRiskRecalculationJob,
+} from './modules/patients/risk-recalculation-job';
+import {
+  startBalanceMonitoringJob,
+  stopBalanceMonitoringJob,
+} from './modules/payments/services/balance-monitoring-job';
+import {
+  startWaitlistExpiryJob,
+  stopWaitlistExpiryJob,
+} from './modules/appointments/waitlist-expiry-job';
+import {
+  startAppointmentReminderJob,
+  stopAppointmentReminderJob,
+} from './modules/appointments/appointment-reminder-job';
+import {
+  startClaimableExpiryNotificationJob,
+  stopClaimableExpiryNotificationJob,
+} from './modules/payments/services/claimable-expiry-notification-job';
+import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
 import { getCacheMetrics } from './services/cache.service';
+import {
+  mongodbConnectionPoolSize,
+  mongodbPoolWaitQueueSize,
+} from './services/metrics.service';
+import { metricsMiddleware } from './middlewares/metrics.middleware';
+import metricsRouter from './modules/metrics/metrics.routes';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
 import { portalRoutes } from './modules/portal/portal.controller';
 import { reportRoutes } from './modules/reports/reports.controller';
 import { consentRoutes } from './modules/consent/consent.controller';
 import { subscriptionRoutes } from './modules/subscriptions/subscriptions.controller';
+import {
+  immunizationRoutes,
+  cvxCodesRouter,
+} from './modules/immunizations/immunizations.controller';
 import logger from './utils/logger';
 import apiKeyRoutes from './modules/api-keys/api-keys.routes';
 import { v2Router } from './routes/v2';
 import { SocketService } from './services/socket.service';
+import scheduleRoutes from './modules/schedules/schedules.routes';
+import { requestAuditMiddleware } from './middlewares/request-audit.middleware';
+import cdsRoutes from './modules/cds/cds.controller';
+import { seedBuiltInRules } from './modules/cds/cds-seed';
+import onboardingRoutes from './modules/clinics/onboarding.routes';
+import peerReviewsRouter from './modules/peer-reviews/peer-reviews.router';
+import { preAuthRoutes } from './modules/pre-auth/pre-auth.controller';
+import federationRouter from './modules/federation/federation.router';
+import exportRouter from './modules/export/export.routes';
+import { complianceRoutes } from './modules/compliance/compliance.controller';
+import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
 
 
 const app = express();
@@ -107,7 +158,7 @@ app.use(
       }
       return compression.filter(req, res);
     },
-  }),
+  })
 );
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
@@ -136,20 +187,29 @@ app.use(
   pinoHttp({
     logger,
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
-    autoLogging: { ignore: (req) => isProd && req.url === '/health' },
+    autoLogging: {
+      ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready'),
+    },
     redact: ['req.headers.authorization'],
   })
 );
+
+// ── Request ID propagation ────────────────────────────────────────────────────
+app.use(requestIdPropagationMiddleware);
 
 // ── Body parsing & sanitization ───────────────────────────────────────────────
 app.use(express.json({ limit: standardLimit }));
 app.use(express.urlencoded({ extended: true, limit: standardLimit }));
 app.use(mongoSanitize({ replaceWith: '_' }));
+app.use(requestAuditMiddleware);
 
 // ── Content-Type validation (issue #351) ──────────────────────────────────────
 // Reject non-JSON bodies on mutating requests (POST/PUT/PATCH)
+// Bypass for multipart/form-data routes (e.g. CSV import)
+const MULTIPART_BYPASS = ['/api/v1/patients/import', '/api/v1/patients/'];
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.headers['content-length'] !== '0') {
+    if (MULTIPART_BYPASS.some((p) => req.path.startsWith(p))) return next();
     if (!req.is('application/json') && !req.is('application/x-www-form-urlencoded')) {
       return res
         .status(415)
@@ -159,9 +219,13 @@ app.use((req, res, next) => {
   next();
 });
 
-
 // ── Health check ──────────────────────────────────────────────────────────────
 app.use('/health', healthRoutes);
+
+// ── Prometheus metrics ────────────────────────────────────────────────────────
+// Must be registered before API routes so all requests are measured
+app.use(metricsMiddleware);
+app.use('/metrics', metricsRouter);
 
 // ── API versions endpoint ─────────────────────────────────────────────────────
 app.get('/api/versions', (_req, res) => {
@@ -188,14 +252,20 @@ app.use('/api/v1/clinics', clinicRoutes);
 app.use('/api/v1/users', userManagementRoutes); // User management endpoints
 app.use('/api/v1/users', userRoutes); // User profile endpoints
 app.use('/api/v1/patients', patientRoutes);
+app.use('/api/v1/patients/search', patientSearchLimiter);
+app.use('/api/v1/patients', medicalHistoryRoutes);
+app.use('/api/v1/patients', patientPhotoRoutes);
 app.use('/api/v1/encounters', encounterRoutes);
 app.use('/api/v1/encounter-templates', encounterTemplateRoutes);
-app.use('/api/v1/payments', paymentLimiter, paymentRoutes);
+app.use('/api/v1/payments', paymentLimiter, paymentsRouter);
+app.use('/api/v1/payments', reimbursementRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
+app.use('/api/v1/audit', auditRoutes);
 app.use('/api/v1/ai', aiLimiter, express.json({ limit: aiLimit }), aiRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
+app.use('/api/v1/waitlist', waitlistRoutes);
 app.use('/api/v1/icd10', icd10Routes);
 app.use('/api/v1/lab-results', labResultRoutes);
 app.use('/api/v1/settings', clinicSettingsRoutes);
@@ -204,9 +274,23 @@ app.use('/api/v1/referrals', referralRoutes);
 app.use('/api/v1/invoices', invoiceRoutes);
 app.use('/api/v1/care-plans', carePlanRoutes);
 app.use('/api/v1/portal', portalRoutes);
-app.use('/api/v1/reports', reportRoutes);
+app.use('/api/v1/reports', reportGenerationLimiter, reportRoutes);
 app.use('/api/v1', consentRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
+app.use('/api/v1/schedules', scheduleRoutes);
+app.use('/api/v1/patients/:id/immunizations', immunizationRoutes);
+app.use('/api/v1/cds', cdsRoutes);
+app.use('/api/v1/onboarding', onboardingRoutes);
+app.use('/api/v1/pre-auth', paymentLimiter, preAuthRoutes);
+app.use('/api/v1/peer-reviews', peerReviewsRouter);
+app.use('/api/v1/compliance', complianceRoutes);
+
+// ── Stellar federation (public, no auth) ──────────────────────────────────────
+app.use('/.well-known', federationRouter);
+app.use('/federation', federationRouter);
+
+// ── Export routes (HIPAA Right of Access + FHIR) ──────────────────────────────
+app.use('/api/v1', exportRouter);
 
 setupSwagger(app);
 
@@ -220,6 +304,9 @@ export default app;
 async function startServer() {
   await connectDB();
 
+  // Seed built-in CDS rules
+  await seedBuiltInRules();
+
   // Initialize Socket.IO service
   const socketService = SocketService.getInstance(server);
   logger.info('Socket.IO service initialized');
@@ -229,8 +316,27 @@ async function startServer() {
     logger.info('📡 Socket.IO server ready for real-time connections');
   });
 
+  // Initialise Socket.IO on the same HTTP server
+  initSocket(server);
+  logger.info('Socket.IO initialised');
+
   startPaymentExpirationJob();
   startReconciliationJob();
+  startRiskRecalculationJob();
+  startBalanceMonitoringJob();
+  startWaitlistExpiryJob();
+  startAppointmentReminderJob();
+  startClaimableExpiryNotificationJob();
+  startXLMRateJob();
+
+  // Track MongoDB connection pool metrics for Prometheus
+  setInterval(() => {
+    const pool = (mongoose.connection as any).pool;
+    const poolSize = pool?.totalConnectionCount ?? 0;
+    const waitQueueSize = pool?.waitQueueSize ?? 0;
+    mongodbConnectionPoolSize.set(poolSize);
+    mongodbPoolWaitQueueSize.set(waitQueueSize);
+  }, 15_000);
 
   // Graceful shutdown handler
   const shutdown = async (signal: string) => {
@@ -244,7 +350,13 @@ async function startServer() {
         // Stop payment expiration job
         stopPaymentExpirationJob();
         stopReconciliationJob();
-        logger.info('Payment expiration job stopped');
+        stopRiskRecalculationJob();
+        stopBalanceMonitoringJob();
+        stopWaitlistExpiryJob();
+        stopAppointmentReminderJob();
+        stopClaimableExpiryNotificationJob();
+        stopXLMRateJob();
+        logger.info('All background jobs stopped');
 
         // Close database connection
         await mongoose.connection.close();

@@ -15,6 +15,16 @@ export interface IAppointment extends Document {
   cancelledAt?: Date;
   cancellationReason?: string;
   checkedInAt?: Date;
+  isTelemedicine?: boolean;
+  videoRoomId?: string;
+  videoRoomUrl?: string;
+  videoProvider?: 'daily.co' | 'jitsi' | 'twilio_video';
+  recordingConsent?: boolean;
+  videoStartedAt?: Date;
+  videoEndedAt?: Date;
+  videoDuration?: number; // minutes
+  reminderSent24h?: boolean;
+  reminderSent1h?: boolean;
 }
 
 const AppointmentSchema = new Schema<IAppointment>(
@@ -41,6 +51,20 @@ const AppointmentSchema = new Schema<IAppointment>(
     cancelledAt: { type: Date },
     cancellationReason: { type: String },
     checkedInAt: { type: Date },
+    isTelemedicine: { type: Boolean, default: false },
+    videoRoomId: { type: String },
+    videoRoomUrl: { type: String },
+    videoProvider: {
+      type: String,
+      enum: ['daily.co', 'jitsi', 'twilio_video'],
+      default: 'daily.co',
+    },
+    recordingConsent: { type: Boolean, default: false },
+    videoStartedAt: { type: Date },
+    videoEndedAt: { type: Date },
+    videoDuration: { type: Number }, // minutes
+    reminderSent24h: { type: Boolean, default: false },
+    reminderSent1h: { type: Boolean, default: false },
   },
   { timestamps: true, versionKey: false }
 );

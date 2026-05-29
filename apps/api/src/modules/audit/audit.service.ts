@@ -2,6 +2,7 @@ import { Request } from 'express';
 import { Types } from 'mongoose';
 import { AuditAction, AuditLogModel } from './audit.model';
 import logger from '../../utils/logger';
+import { extractRequestId } from '../../utils/request-id';
 
 interface AuditLogParams {
   action: AuditAction;
@@ -10,7 +11,7 @@ interface AuditLogParams {
   userId?: string | Types.ObjectId;
   clinicId?: string | Types.ObjectId;
   outcome?: 'SUCCESS' | 'FAILURE';
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -27,6 +28,7 @@ export async function auditLog(params: AuditLogParams, req?: Request): Promise<v
       : undefined;
 
     const userAgent = req?.headers['user-agent'];
+    const requestId = req ? extractRequestId(req) : undefined;
 
     await AuditLogModel.create({
       userId: params.userId ? new Types.ObjectId(params.userId) : undefined,
@@ -36,6 +38,7 @@ export async function auditLog(params: AuditLogParams, req?: Request): Promise<v
       resourceId: params.resourceId,
       ipAddress,
       userAgent,
+      requestId,
       outcome: params.outcome || 'SUCCESS',
       metadata: params.metadata,
       timestamp: new Date(),

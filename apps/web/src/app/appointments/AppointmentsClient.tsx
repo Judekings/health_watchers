@@ -11,6 +11,8 @@ interface Appointment {
   type: string;
   status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed' | 'no-show' | 'patient_arrived';
   chiefComplaint?: string;
+  isTelemedicine?: boolean;
+  videoRoomUrl?: string;
 }
 
 interface Labels {
@@ -226,7 +228,7 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                           <div
                             key={appt._id}
                             role="article"
-                            aria-label={`${appt.type} at ${new Date(appt.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                            aria-label={`${appt.type} at ${new Date(appt.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${appt.isTelemedicine ? ' (telemedicine)' : ''}`}
                             style={{
                               background: STATUS_COLORS[appt.status] ?? '#6b7280',
                               color: '#fff',
@@ -244,6 +246,21 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
                               ({appt.duration}m)
                             </div>
                             <div style={{ opacity: 0.9 }}>{appt.type}</div>
+                            {appt.isTelemedicine && (
+                              <div
+                                style={{
+                                  display: 'inline-block',
+                                  background: 'rgba(255,255,255,0.25)',
+                                  borderRadius: 3,
+                                  padding: '0 0.3rem',
+                                  fontSize: '0.65rem',
+                                  marginTop: '0.15rem',
+                                }}
+                                aria-label="telemedicine"
+                              >
+                                📹 Video
+                              </div>
+                            )}
                             {appt.chiefComplaint && (
                               <div
                                 style={{

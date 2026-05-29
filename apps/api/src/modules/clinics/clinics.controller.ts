@@ -20,12 +20,24 @@ router.post('/', authenticate, requireRoles('SUPER_ADMIN'), async (req: Request,
     // Generate Stellar keypair for the new clinic
     const { publicKey, encryptedSecretKey, iv } = generateClinicKeypair();
 
+    // Generate a unique federation address slug from the clinic name
+    const baseSlug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    let slug = baseSlug;
+    let suffix = 1;
+    while (await ClinicModel.exists({ federationAddress: slug })) {
+      slug = `${baseSlug}-${suffix++}`;
+    }
+
     const clinic = await ClinicModel.create({
       name,
       address,
       phone,
       email,
       stellarPublicKey: publicKey,
+      federationAddress: slug,
       subscriptionTier,
       createdBy: req.user!.userId,
     });
@@ -59,8 +71,8 @@ router.post('/', authenticate, requireRoles('SUPER_ADMIN'), async (req: Request,
     }, req);
 
     return res.status(201).json({ status: 'success', data: clinic });
-  } catch (err: any) {
-    return res.status(400).json({ error: 'BadRequest', message: err.message });
+  } catch (err: unknown) {
+    return res.status(400).json({ error: 'BadRequest', message: (err as Error).message });
   }
 });
 
@@ -85,8 +97,8 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Forbidden', message: 'Insufficient permissions' });
     }
     return res.json({ status: 'success', data: clinic });
-  } catch (err: any) {
-    return res.status(500).json({ error: 'InternalError', message: err.message });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: 'InternalError', message: (err as Error).message });
   }
 });
 

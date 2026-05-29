@@ -8,9 +8,17 @@ export type AppRole =
   | 'PATIENT';
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      user?:      { userId: string; role: AppRole; clinicId: string };
+      user?: {
+        userId: string;
+        id?: string;
+        role: AppRole;
+        clinicId: string;
+        patientId?: string;
+        isSuperAdmin?: boolean;
+      };
       requestId?: string;
     }
   }

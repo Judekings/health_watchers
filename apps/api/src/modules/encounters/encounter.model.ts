@@ -38,13 +38,42 @@ export interface SoapNotes {
   plan?: string;        // Treatment plan (rich HTML)
 }
 
+export interface CPTCode {
+  code: string; // CPT code (e.g., "99213")
+  description: string;
+  units: number; // Number of times procedure was performed
+  fee: string; // Fee in USD (stored as string to avoid floating point issues)
+}
+
+export interface BillingInfo {
+  cptCodes: CPTCode[];
+  billingStatus: 'unbilled' | 'billed' | 'paid' | 'denied';
+  insuranceClaimId?: string; // External reference to insurance claim
+  totalFee: string; // Total fee in USD
+  billedAt?: Date;
+  paidAt?: Date;
+}
+
+export interface Attachment {
+  fileId: string;
+  fileName: string;
+  fileType: 'PDF' | 'JPEG' | 'PNG' | 'DICOM';
+  fileSize: number;
+  uploadedBy: Schema.Types.ObjectId;
+  uploadedAt: Date;
+  storageKey: string;
+}
 export interface Encounter {
   patientId: Schema.Types.ObjectId;
   clinicId: Schema.Types.ObjectId;
   attendingDoctorId: Schema.Types.ObjectId;
   encounteredBy?: Schema.Types.ObjectId;
+  type?: 'consultation' | 'telemedicine' | 'follow-up' | 'procedure';
+  appointmentId?: Schema.Types.ObjectId;
+  /** The specific template version used when creating this encounter. */
+  templateVersionId?: Schema.Types.ObjectId;
   chiefComplaint: string;
-  status: 'open' | 'closed' | 'follow-up' | 'cancelled';
+  status: 'open' | 'closed' | 'follow-up' | 'cancelled' | 'pending_cosignature';
   notes?: string;
   soapNotes?: SoapNotes;
   diagnosis?: Diagnosis[];
@@ -54,6 +83,8 @@ export interface Encounter {
   followUpDate?: Date;
   aiSummary?: string;
   isActive?: boolean;
+  billing?: BillingInfo;
+  attachments?: Attachment[];
 }
 
 const vitalSignsSchema = new Schema<VitalSigns>(
@@ -108,14 +139,56 @@ const soapNotesSchema = new Schema<SoapNotes>(
   { _id: false }
 );
 
+const cptCodeSchema = new Schema<CPTCode>(
+  {
+    code: { type: String, required: true },
+    description: { type: String, required: true },
+    units: { type: Number, required: true, min: 1, default: 1 },
+    fee: { type: String, required: true },
+  },
+  { _id: false }
+);
+
+const billingInfoSchema = new Schema<BillingInfo>(
+  {
+    cptCodes: { type: [cptCodeSchema], default: [] },
+    billingStatus: { 
+      type: String, 
+      enum: ['unbilled', 'billed', 'paid', 'denied'], 
+      default: 'unbilled',
+      index: true 
+    },
+    insuranceClaimId: { type: String },
+    totalFee: { type: String, required: true, default: '0.00' },
+    billedAt: { type: Date },
+    paidAt: { type: Date },
+  },
+  { _id: false }
+);
+
+const attachmentSchema = new Schema<Attachment>(
+  {
+    fileId: { type: String, required: true },
+    fileName: { type: String, required: true },
+    fileType: { type: String, enum: ['PDF', 'JPEG', 'PNG', 'DICOM'], required: true },
+    fileSize: { type: Number, required: true },
+    uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    uploadedAt: { type: Date, default: Date.now },
+    storageKey: { type: String, required: true },
+  },
+  { _id: true }
+);
 const encounterSchema = new Schema<Encounter>(
   {
     patientId:         { type: Schema.Types.ObjectId, ref: 'Patient',  required: true, index: true },
     clinicId:          { type: Schema.Types.ObjectId, ref: 'Clinic',   required: true, index: true },
     attendingDoctorId: { type: Schema.Types.ObjectId, ref: 'User',     required: true, index: true },
     encounteredBy:     { type: Schema.Types.ObjectId, ref: 'User' },
+    type:              { type: String, enum: ['consultation', 'telemedicine', 'follow-up', 'procedure'], default: 'consultation' },
+    appointmentId:     { type: Schema.Types.ObjectId, ref: 'Appointment' },
+    templateVersionId: { type: Schema.Types.ObjectId, ref: 'EncounterTemplate' },
     chiefComplaint:    { type: String, required: true },
-    status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled'], default: 'open', index: true },
+    status:            { type: String, enum: ['open', 'closed', 'follow-up', 'cancelled', 'pending_cosignature'], default: 'open', index: true },
     notes:             { type: String },
     soapNotes:         { type: soapNotesSchema },
     treatmentPlan:     { type: String },
@@ -125,13 +198,24 @@ const encounterSchema = new Schema<Encounter>(
     followUpDate:      { type: Date },
     aiSummary:         { type: String },
     isActive:          { type: Boolean, default: true, index: true },
+    billing:           { type: billingInfoSchema },
+    attachments:       { type: [attachmentSchema], default: [] },
   },
   { timestamps: true, versionKey: false }
 );
 
 // Compound index for paginated clinic-scoped queries
 encounterSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });
-encounterSchema.index({ '$**': 'text' }); // full-text search across all string fields
+encounterSchema.index({ clinicId: 1, createdAt: -1 });           // List encounters for clinic
+encounterSchema.index({ patientId: 1, createdAt: -1 });          // Patient encounter history
+encounterSchema.index({ clinicId: 1, patientId: 1, status: 1 }); // Filter by status
+encounterSchema.index({ encounteredBy: 1, createdAt: -1 });      // Doctor's encounters
+// Compound index for search/filter performance (issue #394)
+encounterSchema.index({ clinicId: 1, createdAt: -1, status: 1 });
+encounterSchema.index({ clinicId: 1, status: 1, createdAt: -1 });             // Status-first filter + date sort
+encounterSchema.index({ clinicId: 1, attendingDoctorId: 1, createdAt: -1 }); // Doctor-scoped queries
+// Targeted text index on searchable fields (replaces wildcard $** index)
+encounterSchema.index({ chiefComplaint: 'text', notes: 'text' }, { name: 'encounter_text_search' });
 
 const FREE_TEXT_FIELDS = ['chiefComplaint', 'notes', 'treatmentPlan', 'aiSummary'] as const;
 const SOAP_FIELDS = ['subjective', 'objective', 'assessment', 'plan'] as const;
@@ -146,6 +230,29 @@ encounterSchema.pre('save', function () {
     for (const field of SOAP_FIELDS) {
       const val = (this.soapNotes as any)[field];
       if (val) (this.soapNotes as any)[field] = sanitizeHtml(val);
+    }
+  }
+});
+
+encounterSchema.pre('findOneAndUpdate', function () {
+  const update = this.getUpdate() as any;
+  if (!update) return;
+
+  for (const field of FREE_TEXT_FIELDS) {
+    if (update[field]) update[field] = sanitizeText(update[field]);
+    if (update.$set?.[field]) update.$set[field] = sanitizeText(update.$set[field]);
+  }
+
+  if (update.soapNotes) {
+    for (const field of SOAP_FIELDS) {
+      const val = update.soapNotes[field];
+      if (val) update.soapNotes[field] = sanitizeHtml(val);
+    }
+  }
+  if (update.$set?.soapNotes) {
+    for (const field of SOAP_FIELDS) {
+      const val = update.$set.soapNotes[field];
+      if (val) update.$set.soapNotes[field] = sanitizeHtml(val);
     }
   }
 });
