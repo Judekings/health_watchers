@@ -63,7 +63,6 @@ export interface Attachment {
   uploadedAt: Date;
   storageKey: string;
 }
-
 export interface Encounter {
   patientId: Schema.Types.ObjectId;
   clinicId: Schema.Types.ObjectId;
@@ -181,7 +180,6 @@ const attachmentSchema = new Schema<Attachment>(
   },
   { _id: true }
 );
-
 const encounterSchema = new Schema<Encounter>(
   {
     patientId:         { type: Schema.Types.ObjectId, ref: 'Patient',  required: true, index: true },
