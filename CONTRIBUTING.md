@@ -469,7 +469,7 @@ npm test -- --projects apps/api
 
 ## Commit Messages
 
-We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification. This is enforced by `commitlint` on every commit.
 
 ```
 <type>(<scope>): <subject>
@@ -479,39 +479,11 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 <footer>
 ```
 
-### Types
+See [Conventional Commits](https://www.conventionalcommits.org/) for details on valid types and structure.
 
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, etc.)
-- `refactor`: Code refactoring
-- `test`: Test additions or modifications
-- `chore`: Maintenance tasks
-- `perf`: Performance improvements
-- `ci`: CI/CD changes
+## Release Process
 
-### Examples
-
-```bash
-feat(auth): add two-factor authentication
-
-Implement TOTP-based 2FA for user accounts.
-Users can enable 2FA in their profile settings.
-
-Closes #123
-
-fix(payments): prevent double-confirmation of transactions
-
-Add idempotency check to prevent the same transaction
-from being confirmed multiple times.
-
-Closes #456
-
-docs(readme): update installation instructions
-
-Add Docker setup instructions and troubleshooting section.
-```
+We use [Changesets](https://github.com/changesets/changesets) for automated versioning and release management. For details, see [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Security
 
