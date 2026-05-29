@@ -32,7 +32,9 @@ import {
 import { auditLog } from '../audit/audit.service';
 import { withSpan } from '@api/utils/tracer';
 import { cache } from '@api/services/cache.service';
+import { cacheResponse } from '@api/middlewares/cache.middleware';
 import { incrementUsage } from '../subscriptions/usage.service';
+import { communicationsRouter } from '../communications/communications.controller';
 
 const router = Router();
 router.use(authenticate);
