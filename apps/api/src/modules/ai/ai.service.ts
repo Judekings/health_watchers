@@ -121,6 +121,118 @@ export async function generatePatientInsights(encounters: EncounterSummary[]): P
   }
 }
 
+export interface PatientSummaryEncounterInput {
+  chiefComplaint?: string;
+  diagnosis?: unknown;
+  notes?: string;
+  createdAt: Date | string;
+}
+
+export interface PatientHealthSummaryInput {
+  age?: number | null;
+  sex?: string | null;
+  allergies: Array<{ allergen: string; severity: string; reaction?: string }>;
+  currentMedications: Array<{ name: string; dose?: string; frequency?: string }>;
+  recentLabResults: Array<{
+    testName: string;
+    orderedAt: Date | string;
+    results?: Array<{ parameter: string; value: string; unit?: string; flag?: string }>;
+  }>;
+  upcomingAppointments: Array<{
+    scheduledAt: Date | string;
+    type: string;
+    status: string;
+    clinician?: string;
+  }>;
+  recentEncounters: PatientSummaryEncounterInput[];
+  riskFactors: string[];
+}
+
+const patientHealthSummarySchema = z.object({
+  overview: z.string().trim().min(1),
+  activeConditions: z.array(z.string().trim().min(1)),
+  currentMedications: z.array(z.string().trim().min(1)),
+  recentLabResults: z.array(z.string().trim().min(1)),
+  upcomingAppointments: z.array(z.string().trim().min(1)),
+  riskFactors: z.array(z.string().trim().min(1)),
+});
+
+export interface PatientHealthSummary {
+  overview: string;
+  activeConditions: string[];
+  currentMedications: string[];
+  recentLabResults: string[];
+  upcomingAppointments: string[];
+  riskFactors: string[];
+}
+
+export async function generatePatientHealthSummary(input: PatientHealthSummaryInput): Promise<PatientHealthSummary> {
+  const client = getGeminiClient();
+
+  const promptPayload = {
+    demographics: {
+      age: input.age ?? null,
+      sex: input.sex ?? null,
+    },
+    allergies: input.allergies,
+    currentMedications: input.currentMedications,
+    recentLabResults: input.recentLabResults.map((lab) => ({
+      testName: lab.testName,
+      orderedAt: new Date(lab.orderedAt).toISOString(),
+      results: lab.results?.map((result) => ({
+        parameter: result.parameter,
+        value: result.value,
+        unit: result.unit,
+        flag: result.flag,
+      })),
+    })),
+    upcomingAppointments: input.upcomingAppointments.map((appointment) => ({
+      scheduledAt: new Date(appointment.scheduledAt).toISOString(),
+      type: appointment.type,
+      status: appointment.status,
+      clinician: appointment.clinician,
+    })),
+    recentEncounters: input.recentEncounters.map((encounter) => ({
+      createdAt: new Date(encounter.createdAt).toISOString(),
+      chiefComplaint: encounter.chiefComplaint,
+      diagnosis: encounter.diagnosis,
+      notes: encounter.notes,
+    })),
+    riskFactors: input.riskFactors,
+  };
+
+  const safeText = stripPII(JSON.stringify(promptPayload, null, 2));
+
+  const prompt = `You are a medical AI assistant. Generate a one-page clinical patient summary for a clinician using only the de-identified data below.
+
+Return ONLY valid JSON with this exact structure:
+{
+  "overview": "string",
+  "activeConditions": ["string"],
+  "currentMedications": ["string"],
+  "recentLabResults": ["string"],
+  "upcomingAppointments": ["string"],
+  "riskFactors": ["string"]
+}
+
+Sections must be concise and clinically useful. Do not include any direct identifiers or speculate beyond the supplied data.
+
+Patient context:
+${safeText}`;
+
+  try {
+    const model = client.getGenerativeModel({ model: 'gemini-1.5-flash', generationConfig: { responseMimeType: 'application/json' } });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    const jsonStr = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    const parsed = JSON.parse(jsonStr);
+    return patientHealthSummarySchema.parse(parsed);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Failed to generate patient health summary: ${msg}`);
+  }
+}
+
 // ── Differential Diagnosis ───────────────────────────────────────────────────
 export interface DifferentialDiagnosisInput {
   chiefComplaint: string;

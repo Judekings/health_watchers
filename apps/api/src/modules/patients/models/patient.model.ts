@@ -43,6 +43,7 @@ export interface Patient {
   riskLevel?: RiskLevel;
   riskFactors?: string[];
   lastRiskCalculatedAt?: Date;
+  lastSummaryGeneratedAt?: Date;
   nextRiskReviewDate?: Date;
   photoUrl?: string;
   thumbnailUrl?: string;
@@ -100,6 +101,7 @@ const patientSchema = new Schema<Patient>(
     riskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'] },
     riskFactors: { type: [String], default: undefined },
     lastRiskCalculatedAt: { type: Date },
+    lastSummaryGeneratedAt: { type: Date },
     nextRiskReviewDate: { type: Date },
     photoUrl: { type: String },
     thumbnailUrl: { type: String },
