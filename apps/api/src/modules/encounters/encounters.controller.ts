@@ -306,6 +306,19 @@ router.post(
     encountersCreatedTotal.inc({ clinicId: req.user!.clinicId });
     await incrementUsage(req.user!.clinicId, 'encounterCount');
 
+    // Track ICD-10 codes used on this encounter so they surface in the clinic's
+    // "recently used" list. Best-effort — never blocks encounter creation.
+    if (Array.isArray(req.body.diagnosis) && req.body.diagnosis.length) {
+      const { recordRecentUsage } = await import('../icd10/icd10-favorites.service');
+      await Promise.all(
+        req.body.diagnosis
+          .filter((d: { code?: string }) => d?.code)
+          .map((d: { code: string; description?: string }) =>
+            recordRecentUsage(req.user!.clinicId, d.code, d.description ?? '')
+          )
+      );
+    }
+
     // Evaluate CDS rules for encounter creation
     const patientContext = await cdsRulesEngine.getPatientContext(req.body.patientId, req.user!.clinicId);
     const cdsAlerts = await cdsRulesEngine.evaluateRules('encounter_create', {

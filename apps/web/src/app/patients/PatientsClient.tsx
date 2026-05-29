@@ -4,7 +4,13 @@ import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { type Patient, formatDate } from '@health-watchers/types';
-import { ErrorMessage, TableSkeleton, ModuleEmptyState, Badge } from '@/components/ui';
+import {
+  ErrorMessage,
+  TableSkeleton,
+  ModuleEmptyState,
+  Badge,
+  SectionErrorBoundary,
+} from '@/components/ui';
 import PatientThumbnail from '@/components/patients/PatientThumbnail';
 import { queryKeys } from '@/lib/queryKeys';
 import { API_URL } from '@/lib/api';
@@ -114,7 +120,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           }
         />
       ) : (
-        <>
+        <SectionErrorBoundary name="patient list">
           {/* Mobile cards */}
           <div className="flex flex-col gap-4 md:hidden">
             {patients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
@@ -203,7 +209,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
               </tbody>
             </table>
           </div>
-        </>
+        </SectionErrorBoundary>
       )}
     </main>
   );
