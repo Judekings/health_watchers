@@ -153,6 +153,7 @@ All of the following CI checks must pass before merging:
   - TypeScript type checking (`tsc --noEmit`)
   - ESLint with zero-warning policy
   - Prettier format check
+  - SonarCloud quality gate (coverage, duplication, critical issues)
 
 - ✅ **Security Scan**
   - npm audit (fails on high/critical vulnerabilities)
@@ -184,6 +185,21 @@ All of the following CI checks must pass before merging:
 - **Branches must be up to date** before merging
 - **Linear history** preferred (rebase instead of merge commits)
 - **Signed commits** recommended for security
+
+## Quality Gates
+
+We use SonarCloud to enforce code quality gates on `main` and pull requests. The default quality gate requirements are:
+
+- **Test coverage:** overall coverage >= 70% (new code must also meet this threshold)
+- **Critical issues:** no new critical issues allowed
+- **Duplication:** duplication < 3% for the analysed codebase
+
+How this is enforced:
+
+- CI runs SonarCloud analysis and waits for the quality gate; if the gate fails, the check fails and the PR cannot be merged.
+- PR decoration from SonarCloud will appear on pull requests with coverage and issue summaries.
+
+Maintainers may adjust these thresholds in SonarCloud if necessary; any change must be communicated in this document and the project settings.
 
 ### Setting Up Branch Protection (For Maintainers)
 
@@ -469,7 +485,7 @@ npm test -- --projects apps/api
 
 ## Commit Messages
 
-We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification. This is enforced by `commitlint` on every commit.
 
 ```
 <type>(<scope>): <subject>
@@ -479,39 +495,11 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 <footer>
 ```
 
-### Types
+See [Conventional Commits](https://www.conventionalcommits.org/) for details on valid types and structure.
 
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, etc.)
-- `refactor`: Code refactoring
-- `test`: Test additions or modifications
-- `chore`: Maintenance tasks
-- `perf`: Performance improvements
-- `ci`: CI/CD changes
+## Release Process
 
-### Examples
-
-```bash
-feat(auth): add two-factor authentication
-
-Implement TOTP-based 2FA for user accounts.
-Users can enable 2FA in their profile settings.
-
-Closes #123
-
-fix(payments): prevent double-confirmation of transactions
-
-Add idempotency check to prevent the same transaction
-from being confirmed multiple times.
-
-Closes #456
-
-docs(readme): update installation instructions
-
-Add Docker setup instructions and troubleshooting section.
-```
+We use [Changesets](https://github.com/changesets/changesets) for automated versioning and release management. For details, see [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Security
 
@@ -669,3 +657,22 @@ If you have questions, please:
 - Reach out to maintainers
 
 Thank you for contributing to Health Watchers! 🎉
+## Performance Requirements
+
+Critical API paths have k6 p95 baselines checked in CI:
+
+| Endpoint or flow | Threshold |
+| --- | ---: |
+| `GET /api/v1/patients` | 200ms |
+| `POST /api/v1/encounters` | 500ms |
+| `POST /api/v1/payments/intent` | 1s |
+| `GET /health` | 50ms |
+| List endpoints | 200ms |
+
+Run locally after starting the API:
+
+```bash
+BASE_URL=http://localhost:3001 AUTH_TOKEN=your-token k6 run performance/scripts/k6-baseline.js
+```
+
+CI fails if any p95 metric exceeds its baseline by more than 20%.

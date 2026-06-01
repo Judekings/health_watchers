@@ -14,14 +14,17 @@ k8s/
 ├── api/
 │   ├── deployment.yaml         # API Deployment (2 replicas)
 │   ├── service.yaml            # API ClusterIP Service
-│   └── hpa.yaml                # HorizontalPodAutoscaler (2–10 replicas)
+│   ├── hpa.yaml                # HorizontalPodAutoscaler (2–10 replicas)
+│   └── pdb.yaml                # PodDisruptionBudget (minAvailable: 1)
 ├── web/
 │   ├── deployment.yaml         # Web Deployment (2 replicas)
-│   └── service.yaml            # Web ClusterIP Service
+│   ├── service.yaml            # Web ClusterIP Service
+│   └── pdb.yaml                # PodDisruptionBudget (minAvailable: 1)
 └── stellar-service/
     ├── deployment.yaml         # Stellar Service Deployment (2 replicas)
     ├── service.yaml            # Stellar Service ClusterIP Service
-    └── hpa.yaml                # HorizontalPodAutoscaler (2–10 replicas)
+    ├── hpa.yaml                # HorizontalPodAutoscaler (2–10 replicas)
+    └── pdb.yaml                # PodDisruptionBudget (minAvailable: 1)
 
 helm/health-watchers/           # Helm chart (see helm/README.md)
 ```
@@ -117,6 +120,71 @@ helm install prometheus-adapter prometheus-community/prometheus-adapter \
   --set rules.custom[0].name.matches='stellar_payment_queue_depth' \
   --set rules.custom[0].metricsQuery='avg(<<.Series>>{<<.LabelMatchers>>})'
 ```
+
+## Pod Disruption Budgets
+
+Each service has a PodDisruptionBudget that guarantees at least 1 replica remains available during voluntary disruptions (node drains, cluster upgrades, rolling restarts).
+
+| Service         | minAvailable | File                            |
+|-----------------|--------------|---------------------------------|
+| API             | 1            | `k8s/api/pdb.yaml`              |
+| Web             | 1            | `k8s/web/pdb.yaml`              |
+| Stellar Service | 1            | `k8s/stellar-service/pdb.yaml`  |
+
+All deployments run with 2 replicas by default, so `minAvailable: 1` allows Kubernetes to evict one pod at a time while keeping the service live.
+
+### Verify PDBs
+
+```bash
+kubectl get pdb -n health-watchers
+```
+
+Expected output:
+
+```
+NAME              MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+api               1               N/A               1                     ...
+stellar-service   1               N/A               1                     ...
+web               1               N/A               1                     ...
+```
+
+### Simulate a node drain
+
+```bash
+# Cordon and drain a node — Kubernetes will respect the PDB and keep 1 pod running
+kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data
+
+# Watch pods reschedule in real time
+kubectl get pods -n health-watchers -w
+
+# Uncordon when done
+kubectl uncordon <node-name>
+```
+
+If the drain would violate a PDB (e.g. only 1 replica is running), `kubectl drain` will block until a replacement pod becomes ready, preventing downtime.
+
+### Helm chart
+
+PDBs are controlled per-service in `values.yaml`:
+
+```yaml
+api:
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+web:
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+stellarService:
+  pdb:
+    enabled: true
+    minAvailable: 1
+```
+
+Set `pdb.enabled: false` to disable a PDB for a specific service (e.g. in a single-node dev cluster where disruption budgets would block drains).
 
 ## Health Probes
 
