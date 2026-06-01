@@ -7,13 +7,14 @@ export interface IAppointment extends Document {
   scheduledAt: Date;
   duration: number; // minutes (default 30)
   type: 'consultation' | 'follow-up' | 'procedure' | 'emergency';
-  status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed' | 'no-show';
+  status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed' | 'no-show' | 'patient_arrived';
   chiefComplaint?: string;
   notes?: string;
   encounterId?: mongoose.Types.ObjectId;
   cancelledBy?: mongoose.Types.ObjectId;
   cancelledAt?: Date;
   cancellationReason?: string;
+  checkedInAt?: Date;
   isTelemedicine?: boolean;
   videoRoomId?: string;
   videoRoomUrl?: string;
@@ -40,7 +41,7 @@ const AppointmentSchema = new Schema<IAppointment>(
     },
     status: {
       type: String,
-      enum: ['scheduled', 'confirmed', 'cancelled', 'completed', 'no-show'],
+      enum: ['scheduled', 'confirmed', 'cancelled', 'completed', 'no-show', 'patient_arrived'],
       default: 'scheduled',
     },
     chiefComplaint: { type: String },
@@ -49,6 +50,7 @@ const AppointmentSchema = new Schema<IAppointment>(
     cancelledBy: { type: Schema.Types.ObjectId, ref: 'User' },
     cancelledAt: { type: Date },
     cancellationReason: { type: String },
+    checkedInAt: { type: Date },
     isTelemedicine: { type: Boolean, default: false },
     videoRoomId: { type: String },
     videoRoomUrl: { type: String },

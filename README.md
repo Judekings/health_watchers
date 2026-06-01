@@ -3,6 +3,7 @@
 > **Note**: Replace `OWNER` in the badge URLs below with your GitHub username or organization name.
 
 [![CI/CD Pipeline](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/health-watchers/actions/workflows/ci.yml)
+[![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=Health-watchers_health_watchers&metric=alert_status)](https://sonarcloud.io/summary/overview?id=Health-watchers_health_watchers)
 [![codecov](https://codecov.io/gh/OWNER/health-watchers/branch/main/graph/badge.svg)](https://codecov.io/gh/OWNER/health-watchers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
@@ -294,3 +295,22 @@ For questions, issues, or feature requests:
 ---
 
 Made with ❤️ by the Health Watchers team
+
+## API Documentation
+
+### Swagger / OpenAPI
+Interactive docs are available at `/api/docs` when the server is running.
+
+### Postman Collection
+Import the collection and environment from [`docs/postman/`](./docs/postman/) to get started immediately.
+
+| File | Purpose |
+|------|---------|
+| `health-watchers.postman_collection.json` | All API requests with pre-request auth scripts |
+| `health-watchers.postman_environment.json` | Environment variables template |
+
+**Quick start:**
+1. Import both files into Postman
+2. Set `admin_email` and `admin_password` in the environment
+3. Run **Auth → Login** — `jwt_token` is set automatically
+4. All subsequent requests use the token via collection-level bearer auth

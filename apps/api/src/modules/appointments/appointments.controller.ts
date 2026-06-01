@@ -13,6 +13,8 @@ import {
   doctorIdParamsSchema,
   videoStartSchema,
 } from './appointments.validation';
+import { SocketService } from '../../services/socket.service';
+import { NotificationModel } from '../notifications/notification.model';
 import { notifyNextOnWaitlist } from './waitlist.service';
 import { emitToUser } from '@api/realtime/socket';
 
@@ -45,6 +47,111 @@ async function hasConflict(
 
   return (await AppointmentModel.countDocuments(query)) > 0;
 }
+
+async function emitAppointmentStatusChange(
+  appointmentId: string,
+  status: string,
+  appointment: any,
+  additionalData?: any
+) {
+  try {
+    const socketService = SocketService.getInstance();
+    const eventMap = {
+      confirmed: 'appointment:confirmed',
+      cancelled: 'appointment:cancelled',
+      rescheduled: 'appointment:rescheduled',
+      patient_arrived: 'appointment:patient_arrived',
+    };
+
+    const event = eventMap[status as keyof typeof eventMap];
+    if (event) {
+      socketService.emitAppointmentUpdate(appointmentId, event, {
+        appointment,
+        ...additionalData,
+      });
+
+      // Also emit to clinic for staff notifications
+      socketService.emitToClinic(appointment.clinicId.toString(), event, {
+        appointmentId,
+        appointment,
+        ...additionalData,
+      });
+    }
+  } catch (error) {
+    // Log error but don't fail the request
+    console.error('Failed to emit socket event:', error);
+  }
+}
+
+// ── POST /appointments/:id/check-in ───────────────────────────────────────────
+appointmentRoutes.post(
+  '/:id/check-in',
+  validateRequest({ params: appointmentIdParamsSchema }),
+  async (req: Request, res: Response) => {
+    try {
+      const { clinicId } = req.user!;
+      const appointment = await AppointmentModel.findOne({ 
+        _id: req.params.id, 
+        clinicId 
+      });
+      
+      if (!appointment) {
+        return res.status(404).json({ 
+          error: 'NotFound', 
+          message: 'Appointment not found' 
+        });
+      }
+
+      if (appointment.status !== 'confirmed' && appointment.status !== 'scheduled') {
+        return res.status(400).json({
+          error: 'InvalidStatus',
+          message: 'Only confirmed or scheduled appointments can be checked in',
+        });
+      }
+
+      const updated = await AppointmentModel.findByIdAndUpdate(
+        req.params.id,
+        { 
+          status: 'patient_arrived',
+          checkedInAt: new Date(),
+        },
+        { new: true, runValidators: true }
+      ).lean();
+
+      // Emit real-time event
+      await emitAppointmentStatusChange(
+        req.params.id,
+        'patient_arrived',
+        updated,
+        { checkedInAt: updated.checkedInAt }
+      );
+
+      // Create notification for staff
+      await NotificationModel.create({
+        userId: appointment.doctorId,
+        clinicId: appointment.clinicId,
+        type: 'appointment_status_update',
+        title: 'Patient Checked In',
+        message: `Patient has checked in for their appointment`,
+        metadata: {
+          appointmentId: appointment._id,
+          status: 'patient_arrived',
+        },
+      });
+
+      return res.json({ 
+        status: 'success', 
+        data: updated,
+        message: 'Patient checked in successfully'
+      });
+    } catch (err: any) {
+      return res.status(500).json({ 
+        error: 'InternalError', 
+        message: err.message 
+      });
+    }
+  },
+);
 
 // ── GET /appointments/doctor/:doctorId/availability ───────────────────────────
 appointmentRoutes.get(
@@ -195,6 +302,22 @@ appointmentRoutes.post(
         notes,
       });
 
+      // Emit appointment created event
+      await emitAppointmentStatusChange(appointment._id.toString(), 'scheduled', appointment);
+
+      // Create notification for doctor
+      await NotificationModel.create({
+        userId: doctorId,
+        clinicId,
+        type: 'appointment_reminder',
+        title: 'New Appointment Scheduled',
+        message: `A new appointment has been scheduled`,
+        metadata: {
+          appointmentId: appointment._id,
+          status: 'scheduled',
+        },
+      });
+
       return res.status(201).json({ status: 'success', data: appointment });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
@@ -232,6 +355,33 @@ appointmentRoutes.put(
         { new: true, runValidators: true },
       ).lean();
 
+      // Emit real-time events for status changes
+      if (status && status !== existing.status) {
+        await emitAppointmentStatusChange(req.params.id, status, updated);
+        
+        // Create notification
+        await NotificationModel.create({
+          userId: existing.patientId,
+          clinicId: existing.clinicId,
+          type: 'appointment_status_update',
+          title: 'Appointment Status Updated',
+          message: `Your appointment status has been updated to ${status}`,
+          metadata: {
+            appointmentId: existing._id,
+            oldStatus: existing.status,
+            newStatus: status,
+          },
+        });
+      }
+
+      // Emit rescheduled event if time changed
+      if (scheduledAt && newStart.getTime() !== existing.scheduledAt.getTime()) {
+        await emitAppointmentStatusChange(req.params.id, 'rescheduled', updated, {
+          oldScheduledAt: existing.scheduledAt.toISOString(),
+          newScheduledAt: newStart.toISOString(),
+        });
+      }
+
       return res.json({ status: 'success', data: updated });
     } catch (err: any) {
       return res.status(500).json({ error: 'InternalError', message: err.message });
@@ -262,6 +412,40 @@ appointmentRoutes.delete(
         },
         { new: true },
       ).lean();
+
+      // Emit real-time cancellation event
+      await emitAppointmentStatusChange(req.params.id, 'cancelled', updated, {
+        cancelledBy: userId,
+        cancellationReason,
+      });
+
+      // Create notifications for both patient and doctor
+      const notifications = [
+        {
+          userId: appointment.patientId,
+          title: 'Appointment Cancelled',
+          message: `Your appointment has been cancelled. ${cancellationReason || ''}`,
+        },
+        {
+          userId: appointment.doctorId,
+          title: 'Appointment Cancelled',
+          message: `An appointment has been cancelled. ${cancellationReason || ''}`,
+        },
+      ];
+
+      await Promise.all(
+        notifications.map(notif =>
+          NotificationModel.create({
+            ...notif,
+            clinicId: appointment.clinicId,
+            type: 'appointment_status_update',
+            metadata: {
+              appointmentId: appointment._id,
+              cancellationReason,
+            },
+          })
+        )
+      );
 
       // Notify next patient on waitlist (fire-and-forget)
       notifyNextOnWaitlist({
