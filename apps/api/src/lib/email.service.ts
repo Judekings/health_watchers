@@ -517,6 +517,29 @@ export function sendPortalMfaBackupCodesEmail(to: string, patientName: string, b
   enqueue(to, subject, text, html);
 }
 
+/** Notification sent to patient when a new consent version requires acceptance */
+export function sendConsentVersionNotificationEmail(
+  to: string,
+  patientName: string,
+  consentType: string,
+  version: string
+): void {
+  const portalUrl = `${APP_BASE_URL()}/portal/consent`;
+  const typeLabel = consentType.replace(/_/g, ' ');
+  const subject = `Action Required: Updated ${typeLabel} consent form — Health Watchers`;
+  const text = `Hi ${patientName},\n\nYour clinic has updated the ${typeLabel} consent form (version ${version}). Please review and re-consent at your earliest convenience.\n\nReview and sign: ${portalUrl}`;
+  const html = `
+    <h3>Updated Consent Form Requires Your Acceptance</h3>
+    <p>Hi <strong>${patientName}</strong>,</p>
+    <p>Your clinic has published an updated <strong>${typeLabel}</strong> consent form (version <strong>${version}</strong>).</p>
+    <p>Please review and re-accept the updated form to continue receiving care.</p>
+    <p><a href="${portalUrl}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Review &amp; Sign</a></p>
+    <hr style="margin-top:32px">
+    <small style="color:#6b7280">Health Watchers — HIPAA Compliance</small>
+  `;
+  enqueue(to, subject, text, html);
+}
+
 /** MFA grace period reminder sent to DOCTOR/NURSE who haven't set up 2FA */
 export function sendMfaGracePeriodReminderEmail(
   to: string,
