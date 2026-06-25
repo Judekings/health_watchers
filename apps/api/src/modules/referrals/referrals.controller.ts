@@ -9,7 +9,7 @@ import { ClinicModel } from '../clinics/clinic.model';
 import { UserModel } from '../auth/models/user.model';
 import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { asyncHandler } from '@api/utils/asyncHandler';
-import { validateRequest } from '@api/middlewares/validate.middleware';
+import { parsePagination } from '@api/utils/paginate';
 import { sendReferralNotificationEmail } from '@api/lib/email.service';
 import {
   createReferralSchema,
@@ -86,12 +86,28 @@ router.get(
   '/outgoing',
   validateRequest({ query: listReferralsQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const referrals = await ReferralModel.find({ fromClinicId: req.user!.clinicId })
-      .sort({ createdAt: -1 })
-      .populate('patientId', 'firstName lastName systemId')
-      .populate('toClinicId', 'name')
-      .lean();
-    return res.json({ status: 'success', data: referrals });
+    const pagination = parsePagination(req.query as Record<string, any>);
+    if (!pagination) {
+      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+    const { page, limit } = pagination;
+    const filter = { fromClinicId: req.user!.clinicId };
+    const [data, total] = await Promise.all([
+      ReferralModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('patientId', 'firstName lastName systemId')
+        .populate('toClinicId', 'name')
+        .lean(),
+      ReferralModel.countDocuments(filter),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    return res.json({
+      status: 'success',
+      data,
+      meta: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
+    });
   }),
 );
 
@@ -100,12 +116,28 @@ router.get(
   '/incoming',
   validateRequest({ query: listReferralsQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const referrals = await ReferralModel.find({ toClinicId: req.user!.clinicId })
-      .sort({ createdAt: -1 })
-      .populate('patientId', 'firstName lastName systemId')
-      .populate('fromClinicId', 'name')
-      .lean();
-    return res.json({ status: 'success', data: referrals });
+    const pagination = parsePagination(req.query as Record<string, any>);
+    if (!pagination) {
+      return res.status(400).json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+    const { page, limit } = pagination;
+    const filter = { toClinicId: req.user!.clinicId };
+    const [data, total] = await Promise.all([
+      ReferralModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('patientId', 'firstName lastName systemId')
+        .populate('fromClinicId', 'name')
+        .lean(),
+      ReferralModel.countDocuments(filter),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    return res.json({
+      status: 'success',
+      data,
+      meta: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
+    });
   }),
 );
 

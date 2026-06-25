@@ -721,7 +721,6 @@ export default function PatientDetailClient({
         <TabsContent value="consent">
           <ConsentTab patientId={patientId} canEdit={!!canEdit} />
         </TabsContent>
-
         {/* Risk tab */}
         <TabsContent value="risk">
           <RiskTab patient={patient} patientId={patientId} apiV1={API_V1} />

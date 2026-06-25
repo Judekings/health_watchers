@@ -1,4 +1,5 @@
 import './tracing'; // must be first — initialises OpenTelemetry SDK before any other import
+import './instrument'; // must be first — initialises Sentry before any other module
 import './config/env'; // must be second — validates env vars
 
 import crypto from 'crypto';
@@ -10,7 +11,7 @@ import compression from 'compression';
 import pinoHttp from 'pino-http';
 import mongoSanitize from 'express-mongo-sanitize';
 import mongoose from 'mongoose';
-import { connectDB } from './config/db';
+import { connectDB, getPoolMetrics } from './config/db';
 import { authRoutes } from './modules/auth/auth.controller';
 import { userRoutes } from './modules/users/users.controller';
 import { userManagementRoutes } from './modules/users/user-management.controller';
@@ -86,9 +87,9 @@ import {
 } from './modules/payments/services/claimable-expiry-notification-job';
 import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
 import {
-  startPaymentRetryJob,
-  stopPaymentRetryJob,
-} from './modules/payments/services/payment-retry.service';
+  startMfaGracePeriodJob,
+  stopMfaGracePeriodJob,
+} from './modules/auth/mfa-grace-period-job';
 import { getCacheMetrics } from './services/cache.service';
 import {
   mongodbConnectionPoolSize,
@@ -194,7 +195,11 @@ app.use(
     logger,
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
     autoLogging: {
-      ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready'),
+      ignore: (req) =>
+        isProd &&
+        (req.url === '/health/live' ||
+          req.url === '/health/ready' ||
+          req.url === '/health/startup'),
     },
     redact: ['req.headers.authorization'],
   })
@@ -336,14 +341,12 @@ async function startServer() {
   startAppointmentReminderJob();
   startClaimableExpiryNotificationJob();
   startXLMRateJob();
-  startPaymentRetryJob();
+  startMfaGracePeriodJob();
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
-    const pool = (mongoose.connection as any).pool;
-    const poolSize = pool?.totalConnectionCount ?? 0;
-    const waitQueueSize = pool?.waitQueueSize ?? 0;
-    mongodbConnectionPoolSize.set(poolSize);
+    const { totalConnections, waitQueueSize } = getPoolMetrics();
+    mongodbConnectionPoolSize.set(totalConnections);
     mongodbPoolWaitQueueSize.set(waitQueueSize);
   }, 15_000);
 
@@ -365,7 +368,7 @@ async function startServer() {
         stopAppointmentReminderJob();
         stopClaimableExpiryNotificationJob();
         stopXLMRateJob();
-        stopPaymentRetryJob();
+        stopMfaGracePeriodJob();
         logger.info('All background jobs stopped');
 
         // Close database connection

@@ -1898,7 +1898,13 @@ router.get(
  * @swagger
  * /payments/expiring-claimable:
  *   get:
- *     summary: List claimable balances expiring within 24 hours
+ *     summary: List claimable balances expiring within 24 hours (CLINIC_ADMIN)
+ *     description: >
+ *       Returns all unclaimed claimable-balance payment records whose `claimableUntil`
+ *       falls within the next 24 hours. Useful for clinic admins to monitor patients
+ *       who have not yet claimed their payment before the window closes.
+ *       The hourly expiry-notification job also uses this window to send proactive
+ *       email, in-app, and Socket.IO notifications to patients (issue #714).
  *     tags: [Payments]
  *     security:
  *       - bearerAuth: []
@@ -1923,7 +1929,7 @@ router.get(
  *                       claimableUntil: { type: string, format: date-time }
  *                       claimableExpiryNotificationSent: { type: boolean }
  *       403:
- *         description: Forbidden — CLINIC_ADMIN only
+ *         description: Forbidden — CLINIC_ADMIN or SUPER_ADMIN only
  */
 // GET /payments/expiring-claimable — list claimable balances expiring within 24h (CLINIC_ADMIN)
 router.get(
