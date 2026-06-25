@@ -31,7 +31,9 @@ export type AuditAction =
   | 'PAYMENT_EXPORT'
   | 'DOSAGE_CALCULATION'
   | 'CRITICAL_LAB_RESULT'
-  | 'CRITICAL_LAB_ACKNOWLEDGED';
+  | 'CRITICAL_LAB_ACKNOWLEDGED'
+  | 'PATIENT_MERGE'
+  | 'PATIENT_UNMERGE';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -86,6 +88,8 @@ const auditLogSchema = new Schema<AuditLog>(
         'DOSAGE_CALCULATION',
         'CRITICAL_LAB_RESULT',
         'CRITICAL_LAB_ACKNOWLEDGED',
+        'PATIENT_MERGE',
+        'PATIENT_UNMERGE',
       ],
       index: true,
     },

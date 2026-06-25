@@ -28,6 +28,7 @@ import {
 import { auditLog } from '../audit/audit.service';
 import { withSpan } from '@api/utils/tracer';
 import { cache } from '@api/services/cache.service';
+import { DuplicateController } from './duplicate.controller';
 import { incrementUsage } from '../subscriptions/usage.service';
 
 const router = Router();
@@ -954,6 +955,25 @@ router.post(
       },
     });
   })
+);
+
+// ── Merge / Unmerge (CLINIC_ADMIN+ only) ─────────────────────────────────────
+
+// POST /patients/check-duplicates
+router.post('/check-duplicates', asyncHandler(DuplicateController.checkDuplicates));
+
+// POST /patients/:id/merge/:duplicateId  — body: { confirm: true }
+router.post(
+  '/:id/merge/:duplicateId',
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(DuplicateController.mergePatients)
+);
+
+// POST /patients/unmerge/:mergeLogId  — body: { confirm: true }
+router.post(
+  '/unmerge/:mergeLogId',
+  requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
+  asyncHandler(DuplicateController.unmergePatients)
 );
 
 export const patientRoutes = router;
