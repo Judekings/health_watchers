@@ -121,7 +121,8 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
     return () => clearInterval(interval);
   }, [fetchPaths]);
 
-  const submit = async (data: z.infer<typeof schema>) => {
+  const submit = async (formData: z.infer<typeof schema>) => {
+    const data = { ...formData } as PaymentIntentData;
     try {
       const payload: PaymentIntentData = { ...data, feeStrategy };
 
