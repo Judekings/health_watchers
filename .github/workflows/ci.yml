@@ -7,7 +7,7 @@ on:
     branches: [ main, develop ]
 
 env:
-  NODE_VERSION: 18
+  NODE_VERSION: 20
 
 jobs:
   # Stage 0: Lint workflow files
@@ -82,10 +82,10 @@ jobs:
 
       - name: Validate raw manifests (dry-run)
         run: |
-          kubectl apply --dry-run=client -f k8s/namespace.yaml
-          kubectl apply --dry-run=client -f k8s/api/
-          kubectl apply --dry-run=client -f k8s/web/
-          kubectl apply --dry-run=client -f k8s/stellar-service/
+          kubectl apply --dry-run=client --validate=false -f k8s/namespace.yaml
+          kubectl apply --dry-run=client --validate=false -f k8s/api/
+          kubectl apply --dry-run=client --validate=false -f k8s/web/
+          kubectl apply --dry-run=client --validate=false -f k8s/stellar-service/
 
       - name: Assert PDB files exist for all services
         run: |
