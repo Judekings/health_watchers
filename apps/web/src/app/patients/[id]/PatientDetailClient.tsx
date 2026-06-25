@@ -36,6 +36,10 @@ const VitalSignsCharts = dynamic(() => import('@/components/patients/VitalSignsC
 const LabResultsTab = dynamic(() => import('@/components/patients/LabResultsTab'), { ssr: false });
 const PatientReferralsTab = dynamic(() => import('@/components/patients/PatientReferralsTab'), { ssr: false });
 const RiskTab = dynamic(() => import('@/components/patients/RiskTab'), { ssr: false });
+const PatientDocumentsTab = dynamic(
+  () => import('@/components/patients/PatientDocumentsTab').then((m) => ({ default: m.PatientDocumentsTab })),
+  { ssr: false },
+);
 
 interface EncounterResponse {
   id: string;
@@ -437,6 +441,7 @@ export default function PatientDetailClient({
           <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="consent">Consent</TabsTrigger>
           <TabsTrigger value="referrals">Referrals</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
         </TabsList>
 
         {/* Encounters tab */}
@@ -710,13 +715,21 @@ export default function PatientDetailClient({
         {/* Consent tab */}
         <TabsContent value="consent">
           <ConsentTab patientId={patientId} canEdit={!!canEdit} />
+        </TabsContent>
+
         {/* Risk tab */}
         <TabsContent value="risk">
           <RiskTab patient={patient} patientId={patientId} apiV1={API_V1} />
         </TabsContent>
+
         {/* Referrals tab */}
         <TabsContent value="referrals">
           <PatientReferralsTab patientId={patientId} />
+        </TabsContent>
+
+        {/* Documents tab */}
+        <TabsContent value="documents">
+          <PatientDocumentsTab patientId={patientId} clinicId={user?.clinicId ?? ''} />
         </TabsContent>
       </Tabs>
 
