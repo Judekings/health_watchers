@@ -4,7 +4,7 @@ import { cache } from '../../services/cache.service';
 import { stellarClient } from '../payments/services/stellar-client';
 import { isAIServiceAvailable } from '../ai/ai.service';
 import { config } from '@health-watchers/config';
-import { getDbStatus } from '../../config/db';
+import { getDbStatus, getPoolMetrics } from '../../config/db';
 import { getJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-expiration-job';
 
 const router = Router();
@@ -33,46 +33,40 @@ router.get('/ready', async (req: Request, res: Response) => {
   const mongoStart = Date.now();
   try {
     const mongoStatus = mongoose.connection.readyState;
-    // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
     if (mongoStatus === 1) {
-      // Perform a simple ping if connected
       await mongoose.connection.db?.admin().ping();
-      const pool = mongoose.connection.pool;
-      const totalConnections = pool?.totalConnectionCount ?? 0;
-      const waitQueueSize = pool?.waitQueueSize ?? 0;
-      const maxPoolSize = parseInt(process.env.MONGODB_POOL_SIZE ?? '10', 10);
-      const utilization = maxPoolSize > 0 ? totalConnections / maxPoolSize : 0;
-      const poolExhausted = waitQueueSize > 0 && totalConnections >= maxPoolSize;
+      const pool = getPoolMetrics();
+      const poolExhausted = pool.waitQueueSize > 0 && pool.totalConnections >= pool.maxPoolSize;
 
       if (poolExhausted) {
         isReady = false;
         checks.mongodb = {
           status: 'unhealthy',
           message: 'Connection pool exhausted',
-          pool: { totalConnections, waitQueueSize, maxPoolSize, utilization },
+          pool,
           latency: Date.now() - mongoStart,
         };
       } else {
         checks.mongodb = {
           status: 'healthy',
-          pool: { totalConnections, waitQueueSize, maxPoolSize, utilization },
+          pool,
           latency: Date.now() - mongoStart,
         };
       }
     } else {
       isReady = false;
-      checks.mongodb = { 
-        status: 'unhealthy', 
+      checks.mongodb = {
+        status: 'unhealthy',
         message: `Mongoose readyState: ${mongoStatus}`,
-        latency: Date.now() - mongoStart 
+        latency: Date.now() - mongoStart,
       };
     }
   } catch (err) {
     isReady = false;
-    checks.mongodb = { 
-      status: 'unhealthy', 
+    checks.mongodb = {
+      status: 'unhealthy',
       message: err instanceof Error ? err.message : 'Unknown error',
-      latency: Date.now() - mongoStart 
+      latency: Date.now() - mongoStart,
     };
   }
 

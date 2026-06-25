@@ -10,7 +10,7 @@ import compression from 'compression';
 import pinoHttp from 'pino-http';
 import mongoSanitize from 'express-mongo-sanitize';
 import mongoose from 'mongoose';
-import { connectDB } from './config/db';
+import { connectDB, getPoolMetrics } from './config/db';
 import { authRoutes } from './modules/auth/auth.controller';
 import { userRoutes } from './modules/users/users.controller';
 import { userManagementRoutes } from './modules/users/user-management.controller';
@@ -333,10 +333,8 @@ async function startServer() {
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
-    const pool = (mongoose.connection as any).pool;
-    const poolSize = pool?.totalConnectionCount ?? 0;
-    const waitQueueSize = pool?.waitQueueSize ?? 0;
-    mongodbConnectionPoolSize.set(poolSize);
+    const { totalConnections, waitQueueSize } = getPoolMetrics();
+    mongodbConnectionPoolSize.set(totalConnections);
     mongodbPoolWaitQueueSize.set(waitQueueSize);
   }, 15_000);
 
