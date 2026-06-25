@@ -108,20 +108,20 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
     return () => clearInterval(interval);
   }, [fetchPath]);
 
-  const submit = async (data: z.infer<typeof schema>) => {
+  const submit = async (formData: z.infer<typeof schema>) => {
+    const data = { ...formData } as PaymentIntentData;
     try {
       if (pathEstimate && selectedPathIndex !== null) {
         const chosen = paths[selectedPathIndex] ?? pathEstimate;
         // Apply slippage to source amount
         const slipFactor = 1 + parseFloat(slippage) / 100;
         const maxSourceAmount = (parseFloat(chosen.sourceAmount) * slipFactor).toFixed(7);
-        
+
         data.sourceAssetCode = chosen.sourceAssetCode;
         data.sourceAssetIssuer = chosen.sourceAssetIssuer;
         data.destinationAmount = amount;
         data.maxSourceAmount = maxSourceAmount;
         data.path = chosen.path;
-      }
       }
       await onSubmit({ ...data, feeStrategy });
     } catch (err) {
