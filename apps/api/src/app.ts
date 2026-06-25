@@ -194,7 +194,11 @@ app.use(
     logger,
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
     autoLogging: {
-      ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready'),
+      ignore: (req) =>
+        isProd &&
+        (req.url === '/health/live' ||
+          req.url === '/health/ready' ||
+          req.url === '/health/startup'),
     },
     redact: ['req.headers.authorization'],
   })

@@ -43,6 +43,11 @@ api:
     path: /health/ready
     initialDelaySeconds: 10
     periodSeconds: 10
+  startupProbe:
+    path: /health/startup
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 24
   env:
     NODE_ENV: "production"
     API_PORT: "3001"
