@@ -32,8 +32,10 @@ export type AuditAction =
   | 'DOSAGE_CALCULATION'
   | 'CRITICAL_LAB_RESULT'
   | 'CRITICAL_LAB_ACKNOWLEDGED'
-  | 'PATIENT_MERGE'
-  | 'PATIENT_UNMERGE';
+  | 'CLINIC_SWITCH'
+  | 'DATA_EXPORT_REQUEST'
+  | 'DATA_EXPORT_FULFILLED'
+  | 'CONSENT_VERSION_ACCEPTED';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -88,8 +90,9 @@ const auditLogSchema = new Schema<AuditLog>(
         'DOSAGE_CALCULATION',
         'CRITICAL_LAB_RESULT',
         'CRITICAL_LAB_ACKNOWLEDGED',
-        'PATIENT_MERGE',
-        'PATIENT_UNMERGE',
+        'CLINIC_SWITCH',
+        'DATA_EXPORT_REQUEST',
+        'DATA_EXPORT_FULFILLED',
       ],
       index: true,
     },
@@ -131,5 +134,10 @@ auditLogSchema.index({ timestamp: -1 });
 auditLogSchema.index({ userId: 1, timestamp: -1 });
 auditLogSchema.index({ clinicId: 1, timestamp: -1 });
 auditLogSchema.index({ action: 1, timestamp: -1 });
+auditLogSchema.index({ outcome: 1, timestamp: -1 });
+auditLogSchema.index({ resourceType: 1, timestamp: -1 });
+auditLogSchema.index({ ipAddress: 1, timestamp: -1 });
+// Full-text search across action field (metadata is Mixed so not indexable as text)
+auditLogSchema.index({ action: 'text' }, { name: 'audit_text_search' });
 
 export const AuditLogModel = models.AuditLog || model<AuditLog>('AuditLog', auditLogSchema);
