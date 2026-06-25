@@ -107,7 +107,10 @@ export async function getPaymentAnalytics(
     if (payment.assetCode === 'XLM') {
       totalXLM += amount;
       xlmPayments.push(payment);
-      const usdEquiv = await calculateUSDEquivalent(payment.amount, payment.createdAt ?? new Date());
+      const usdEquiv = await calculateUSDEquivalent(
+        payment.amount,
+        payment.createdAt ?? new Date()
+      );
       totalUSD += parseFloat(usdEquiv);
     } else if (payment.assetCode === 'USDC') {
       totalUSDC += amount;

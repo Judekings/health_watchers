@@ -34,7 +34,10 @@ export async function buildPatientRecord(patientId: string): Promise<any> {
 
   const [encounters, payments] = await Promise.all([
     EncounterModel.find({ patientId: new Types.ObjectId(patientId) }).lean(),
-    PaymentRecordModel.find({ clinicId: patient.clinicId, patientId: new Types.ObjectId(patientId) }).lean(),
+    PaymentRecordModel.find({
+      clinicId: patient.clinicId,
+      patientId: new Types.ObjectId(patientId),
+    }).lean(),
   ]);
 
   return { patient, encounters, payments };

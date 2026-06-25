@@ -10,11 +10,7 @@ import {
   getApiKeyUsage,
   getAvailableScopes,
 } from './api-key.controller';
-import {
-  createApiKeySchema,
-  updateApiKeySchema,
-  listApiKeysSchema,
-} from './api-key.validation';
+import { createApiKeySchema, updateApiKeySchema, listApiKeysSchema } from './api-key.validation';
 
 const router = Router();
 
@@ -25,16 +21,28 @@ router.use(authenticate);
 router.get('/scopes', getAvailableScopes);
 
 // Create a new API key
-router.post('/', validateRequest({ body: createApiKeySchema.shape.body }), createApiKey as RequestHandler);
+router.post(
+  '/',
+  validateRequest({ body: createApiKeySchema.shape.body }),
+  createApiKey as RequestHandler
+);
 
 // List API keys
-router.get('/', validateRequest({ query: listApiKeysSchema.shape.query }), listApiKeys as RequestHandler);
+router.get(
+  '/',
+  validateRequest({ query: listApiKeysSchema.shape.query }),
+  listApiKeys as RequestHandler
+);
 
 // Get a specific API key
 router.get('/:id', getApiKey as RequestHandler);
 
 // Update an API key
-router.patch('/:id', validateRequest({ body: updateApiKeySchema.shape.body }), updateApiKey as RequestHandler);
+router.patch(
+  '/:id',
+  validateRequest({ body: updateApiKeySchema.shape.body }),
+  updateApiKey as RequestHandler
+);
 
 // Revoke an API key
 router.delete('/:id', revokeApiKey as RequestHandler);

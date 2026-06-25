@@ -27,7 +27,7 @@ router.post(
     } catch (error) {
       next(error);
     }
-  },
+  }
 );
 
 // GET /api/v1/patients/:id/communications
@@ -52,7 +52,7 @@ router.get(
     } catch (error) {
       next(error);
     }
-  },
+  }
 );
 
 // POST /api/v1/patients/:id/send-sms (stub)
@@ -65,7 +65,7 @@ router.post(
       status: 'error',
       message: 'SMS sending is not yet configured. Please configure Twilio to enable this feature.',
     });
-  },
+  }
 );
 
 // POST /api/v1/patients/:id/send-whatsapp (stub)
@@ -79,7 +79,7 @@ router.post(
       message:
         'WhatsApp sending is not yet configured. Please configure Twilio to enable this feature.',
     });
-  },
+  }
 );
 
 export const communicationsRouter = router;

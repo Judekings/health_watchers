@@ -61,18 +61,18 @@ router.get('/ready', async (req: Request, res: Response) => {
       }
     } else {
       isReady = false;
-      checks.mongodb = { 
-        status: 'unhealthy', 
+      checks.mongodb = {
+        status: 'unhealthy',
         message: `Mongoose readyState: ${mongoStatus}`,
-        latency: Date.now() - mongoStart 
+        latency: Date.now() - mongoStart,
       };
     }
   } catch (err) {
     isReady = false;
-    checks.mongodb = { 
-      status: 'unhealthy', 
+    checks.mongodb = {
+      status: 'unhealthy',
       message: err instanceof Error ? err.message : 'Unknown error',
-      latency: Date.now() - mongoStart 
+      latency: Date.now() - mongoStart,
     };
   }
 
@@ -90,10 +90,10 @@ router.get('/ready', async (req: Request, res: Response) => {
       network: stellarHealth.network,
     };
   } catch (err) {
-    checks.stellarHorizon = { 
-      status: 'degraded', 
+    checks.stellarHorizon = {
+      status: 'degraded',
       message: err instanceof Error ? err.message : 'Connection failed',
-      latency: Date.now() - stellarStart 
+      latency: Date.now() - stellarStart,
     };
   }
 

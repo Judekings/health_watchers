@@ -24,7 +24,7 @@ export class CommunicationService {
   async logCommunication(
     patientId: string,
     params: LogCommunicationInput,
-    user: RequestUser,
+    user: RequestUser
   ): Promise<ICommunicationLog> {
     // Verify patient exists and belongs to clinic
     const patient = await PatientModel.findOne({
@@ -72,7 +72,7 @@ export class CommunicationService {
   async listCommunications(
     patientId: string,
     clinicId: string,
-    query: ListCommunicationsQuery,
+    query: ListCommunicationsQuery
   ): Promise<PaginatedResult<ICommunicationLog>> {
     // Verify patient exists and belongs to clinic
     const patient = await PatientModel.findOne({
@@ -99,13 +99,9 @@ export class CommunicationService {
     }
 
     // Paginate
-    const result = await paginate(
-      CommunicationLogModel,
-      filter,
-      query.page,
-      query.limit,
-      { sentAt: -1 },
-    );
+    const result = await paginate(CommunicationLogModel, filter, query.page, query.limit, {
+      sentAt: -1,
+    });
 
     // Audit log
     await auditLog({

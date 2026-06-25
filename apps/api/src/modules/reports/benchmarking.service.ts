@@ -77,7 +77,9 @@ export async function calculateClinicMetrics(clinicId: string): Promise<ClinicMe
     const count = patientEncounterCounts.get(String(e.patientId)) || 0;
     patientEncounterCounts.set(String(e.patientId), count + 1);
   });
-  const returningPatients = Array.from(patientEncounterCounts.values()).filter((c) => c >= 2).length;
+  const returningPatients = Array.from(patientEncounterCounts.values()).filter(
+    (c) => c >= 2
+  ).length;
   const patientRetentionRate = totalPatients > 0 ? (returningPatients / totalPatients) * 100 : 0;
 
   // AI summary adoption rate

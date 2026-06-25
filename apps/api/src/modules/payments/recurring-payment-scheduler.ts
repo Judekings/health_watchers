@@ -1,4 +1,8 @@
-import { getDuePayments, recordPaymentAttempt, notifyPatientOfPayment } from './recurring-payment.service';
+import {
+  getDuePayments,
+  recordPaymentAttempt,
+  notifyPatientOfPayment,
+} from './recurring-payment.service';
 import logger from '../../utils/logger';
 
 export async function processRecurringPayments() {

@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 env:
   NODE_VERSION: 20
@@ -30,7 +30,7 @@ jobs:
     strategy:
       matrix:
         check: [typecheck, lint, format]
-        node-version: [18, 20]
+        node-version: [20]
 
     steps:
       - uses: actions/checkout@v6
@@ -154,7 +154,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18, 20]
+        node-version: [20]
 
     steps:
       - uses: actions/checkout@v6
@@ -197,7 +197,7 @@ jobs:
           API_PORT: 3001
 
       - name: Upload coverage to Codecov
-        if: matrix.node-version == 18
+        if: matrix.node-version == 20
         uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -215,7 +215,7 @@ jobs:
     strategy:
       matrix:
         app: [web, api, stellar-service]
-        node-version: [18, 20]
+        node-version: [20]
 
     steps:
       - uses: actions/checkout@v6
@@ -244,7 +244,7 @@ jobs:
           NEXT_PUBLIC_STELLAR_NETWORK: testnet
 
       - name: Upload build artifacts
-        if: matrix.node-version == 18
+        if: matrix.node-version == 20
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.app }}

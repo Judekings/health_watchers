@@ -35,10 +35,7 @@ export class QRCodeService {
   /**
    * Generate QR code as PNG buffer
    */
-  static async generateQRCodePNG(
-    data: string,
-    options: QRCodeOptions = {}
-  ): Promise<Buffer> {
+  static async generateQRCodePNG(data: string, options: QRCodeOptions = {}): Promise<Buffer> {
     const defaultOptions = {
       errorCorrectionLevel: 'H' as const,
       type: 'image/png' as const,
@@ -51,16 +48,16 @@ export class QRCodeService {
       ...options,
     };
 
-    return QRCode.toBuffer(data, defaultOptions as unknown as import('qrcode').QRCodeToBufferOptions);
+    return QRCode.toBuffer(
+      data,
+      defaultOptions as unknown as import('qrcode').QRCodeToBufferOptions
+    );
   }
 
   /**
    * Generate QR code as data URL
    */
-  static async generateQRCodeDataURL(
-    data: string,
-    options: QRCodeOptions = {}
-  ): Promise<string> {
+  static async generateQRCodeDataURL(data: string, options: QRCodeOptions = {}): Promise<string> {
     const defaultOptions = {
       errorCorrectionLevel: 'H' as const,
       type: 'image/png' as const,

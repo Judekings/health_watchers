@@ -67,8 +67,10 @@ export function calculateAgeInMonths(dateOfBirth: Date | string): number {
 }
 
 export function getAgeGroup(age: number): AgeGroup {
-  if (age < 1)  return 'infant';
-  if (age < 3)  return 'toddler';
-  if (age < 12) return 'child';  if (age < 18) return 'adolescent';  if (age < 65) return 'adult';
+  if (age < 1) return 'infant';
+  if (age < 3) return 'toddler';
+  if (age < 12) return 'child';
+  if (age < 18) return 'adolescent';
+  if (age < 65) return 'adult';
   return 'elderly';
 }

@@ -30,12 +30,15 @@ router.post(
   async (req: Request, res: Response) => {
     const { id: patientId } = req.params;
     const clinicId = req.user!.clinicId;
-    const { type, expiresAt, signatureData } = req.body as { type: ConsentType; expiresAt?: string; signatureData: string };
+    const { type, expiresAt, signatureData } = req.body as {
+      type: ConsentType;
+      expiresAt?: string;
+      signatureData: string;
+    };
 
     const template = CONSENT_TEMPLATES[type];
     const ipAddress =
-      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-      req.socket.remoteAddress;
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
     const signedAt = new Date();
 
@@ -119,38 +122,34 @@ router.get('/patients/:id/consent', async (req: Request, res: Response) => {
 });
 
 // DELETE /patients/:id/consent/:type — withdraw consent
-router.delete(
-  '/patients/:id/consent/:type',
-  WRITE_ROLES,
-  async (req: Request, res: Response) => {
-    const { id: patientId, type } = req.params;
-    const clinicId = req.user!.clinicId;
+router.delete('/patients/:id/consent/:type', WRITE_ROLES, async (req: Request, res: Response) => {
+  const { id: patientId, type } = req.params;
+  const clinicId = req.user!.clinicId;
 
-    const consent = await ConsentModel.findOneAndUpdate(
-      { patientId, clinicId, type },
-      { status: 'withdrawn', withdrawnAt: new Date() },
-      { new: true }
-    );
+  const consent = await ConsentModel.findOneAndUpdate(
+    { patientId, clinicId, type },
+    { status: 'withdrawn', withdrawnAt: new Date() },
+    { new: true }
+  );
 
-    if (!consent) {
-      return res.status(404).json({ error: 'NotFound', message: 'Consent record not found' });
-    }
-
-    await auditLog(
-      {
-        action: 'PATIENT_UPDATE',
-        resourceType: 'Consent',
-        resourceId: String(consent._id),
-        userId: req.user!.userId,
-        clinicId,
-        metadata: { event: 'consent_withdrawn', type, patientId },
-      },
-      req
-    );
-
-    return res.json({ status: 'success', data: consent });
+  if (!consent) {
+    return res.status(404).json({ error: 'NotFound', message: 'Consent record not found' });
   }
-);
+
+  await auditLog(
+    {
+      action: 'PATIENT_UPDATE',
+      resourceType: 'Consent',
+      resourceId: String(consent._id),
+      userId: req.user!.userId,
+      clinicId,
+      metadata: { event: 'consent_withdrawn', type, patientId },
+    },
+    req
+  );
+
+  return res.json({ status: 'success', data: consent });
+});
 
 export const consentRoutes = router;
 

@@ -36,7 +36,10 @@ export class AuthService {
     );
   }
 
-  async login(email: string, password: string): Promise<{ accessToken: string; refreshToken: string }> {
+  async login(
+    email: string,
+    password: string
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     const response = await this.api.post('/auth/login', { email, password });
     const { accessToken, refreshToken } = response.data.data;
 

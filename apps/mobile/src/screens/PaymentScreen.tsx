@@ -87,9 +87,7 @@ export function PaymentScreen() {
         {invoices.length > 0 ? (
           invoices.map((invoice: any) => (
             <View key={invoice._id} style={styles.invoiceCard}>
-              <Text style={styles.invoiceAmount}>
-                {invoice.amount} XLM
-              </Text>
+              <Text style={styles.invoiceAmount}>{invoice.amount} XLM</Text>
               <Text style={styles.invoiceStatus}>
                 Due: {new Date(invoice.dueDate).toLocaleDateString()}
               </Text>

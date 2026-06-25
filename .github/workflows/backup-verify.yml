@@ -124,21 +124,21 @@ jobs:
           from: 'Health Watchers Alerts <${{ secrets.EMAIL_FROM }}>'
           body: |
             Backup Verification Failed
-            
+
             The MongoDB backup verification has failed. This indicates the backup may be corrupted or incomplete.
-            
+
             Details:
             - Timestamp: ${{ steps.verify.outputs.timestamp }}
             - Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             - Repository: ${{ github.repository }}
             - Branch: ${{ github.ref }}
-            
+
             Action Required:
             1. Review the verification log in the workflow artifacts
             2. Investigate the backup integrity
             3. Consider running a manual backup if needed
             4. Notify the DevOps team
-            
+
             This is a critical alert. Please respond immediately.
         continue-on-error: true
 
@@ -175,12 +175,12 @@ jobs:
             --limit=1 \
             --json=createdAt \
             --jq='.[0].createdAt' 2>/dev/null || echo "")
-          
+
           if [[ -z "$LAST_RUN" ]]; then
             echo "status=never_run" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          
+
           LAST_RUN_EPOCH=$(date -d "$LAST_RUN" +%s)
           NOW_EPOCH=$(date +%s)
           DAYS_SINCE=$(( (NOW_EPOCH - LAST_RUN_EPOCH) / 86400 ))

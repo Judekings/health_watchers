@@ -17,9 +17,12 @@ export function startAppointmentReminderJob() {
   sendAppointmentReminders().catch((err) => logger.error('Reminder job error:', err));
 
   // Then run every 15 minutes
-  reminderJobInterval = setInterval(() => {
-    sendAppointmentReminders().catch((err) => logger.error('Reminder job error:', err));
-  }, 15 * 60 * 1000);
+  reminderJobInterval = setInterval(
+    () => {
+      sendAppointmentReminders().catch((err) => logger.error('Reminder job error:', err));
+    },
+    15 * 60 * 1000
+  );
 }
 
 export function stopAppointmentReminderJob() {

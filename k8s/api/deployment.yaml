@@ -38,11 +38,11 @@ spec:
               protocol: TCP
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "125m"
+              memory: '128Mi'
+              cpu: '125m'
             limits:
-              memory: "256Mi"
-              cpu: "250m"
+              memory: '256Mi'
+              cpu: '250m'
           livenessProbe:
             httpGet:
               path: /health/live
@@ -66,7 +66,7 @@ spec:
                 name: health-watchers-secrets
           env:
             - name: PORT
-              value: "3001"
+              value: '3001'
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false

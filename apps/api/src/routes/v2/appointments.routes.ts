@@ -13,7 +13,10 @@ import {
   doctorIdParamsSchema,
 } from '../../modules/appointments/appointments.validation';
 import { SocketService } from '../../services/socket.service';
-import { NotificationModel, NOTIFICATION_TYPES } from '../../modules/notifications/notification.model';
+import {
+  NotificationModel,
+  NOTIFICATION_TYPES,
+} from '../../modules/notifications/notification.model';
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
@@ -24,7 +27,7 @@ async function hasConflict(
   doctorId: string,
   scheduledAt: Date,
   duration: number,
-  excludeId?: string,
+  excludeId?: string
 ): Promise<boolean> {
   const proposedEnd = new Date(scheduledAt.getTime() + duration * 60_000);
 
@@ -82,15 +85,15 @@ appointmentRoutes.post(
   async (req: Request, res: Response) => {
     try {
       const { clinicId } = req.user!;
-      const appointment = await AppointmentModel.findOne({ 
-        _id: req.params.id, 
-        clinicId 
+      const appointment = await AppointmentModel.findOne({
+        _id: req.params.id,
+        clinicId,
       });
-      
+
       if (!appointment) {
-        return res.status(404).json({ 
-          error: 'NotFound', 
-          message: 'Appointment not found' 
+        return res.status(404).json({
+          error: 'NotFound',
+          message: 'Appointment not found',
         });
       }
 
@@ -103,7 +106,7 @@ appointmentRoutes.post(
 
       const updated = await AppointmentModel.findByIdAndUpdate(
         req.params.id,
-        { 
+        {
           status: 'patient_arrived',
           checkedInAt: new Date(),
         },
@@ -111,12 +114,9 @@ appointmentRoutes.post(
       ).lean();
 
       // Emit real-time event
-      await emitAppointmentStatusChange(
-        req.params.id,
-        'patient_arrived',
-        updated!,
-        { checkedInAt: updated?.checkedInAt }
-      );
+      await emitAppointmentStatusChange(req.params.id, 'patient_arrived', updated!, {
+        checkedInAt: updated?.checkedInAt,
+      });
 
       // Create notification for staff
       await NotificationModel.create({
@@ -131,18 +131,18 @@ appointmentRoutes.post(
         },
       });
 
-      return res.json({ 
-        status: 'success', 
+      return res.json({
+        status: 'success',
         data: updated,
-        message: 'Patient checked in successfully'
+        message: 'Patient checked in successfully',
       });
     } catch (err: any) {
-      return res.status(500).json({ 
-        error: 'InternalError', 
-        message: err.message 
+      return res.status(500).json({
+        error: 'InternalError',
+        message: err.message,
       });
     }
-  },
+  }
 );
 
 // ── GET /appointments (V2 with enhanced response format) ──────────────────────
@@ -152,8 +152,7 @@ appointmentRoutes.get(
   async (req: Request, res: Response) => {
     try {
       const { clinicId, role, userId } = req.user!;
-      const { doctorId, patientId, status, dateFrom, dateTo, page, limit } =
-        req.query as any;
+      const { doctorId, patientId, status, dateFrom, dateTo, page, limit } = req.query as any;
 
       const filter: Record<string, unknown> = { clinicId };
 
@@ -188,10 +187,10 @@ appointmentRoutes.get(
         success: true,
         data: {
           appointments: data,
-          pagination: { 
-            page: Number(page), 
-            limit: Number(limit), 
-            total, 
+          pagination: {
+            page: Number(page),
+            limit: Number(limit),
+            total,
             pages: Math.ceil(total / Number(limit)),
             hasNext: Number(page) < Math.ceil(total / Number(limit)),
             hasPrev: Number(page) > 1,
@@ -206,13 +205,13 @@ appointmentRoutes.get(
         version: '2.0',
       });
     } catch (err: any) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         success: false,
-        error: 'InternalError', 
-        message: err.message 
+        error: 'InternalError',
+        message: err.message,
       });
     }
-  },
+  }
 );
 
 // ── PUT /appointments/:id (V2 with real-time updates) ─────────────────────────
@@ -224,10 +223,10 @@ appointmentRoutes.put(
       const { clinicId } = req.user!;
       const existing = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
       if (!existing) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           success: false,
-          error: 'NotFound', 
-          message: 'Appointment not found' 
+          error: 'NotFound',
+          message: 'Appointment not found',
         });
       }
 
@@ -239,7 +238,10 @@ appointmentRoutes.put(
       const newDuration = duration ?? existing.duration;
       const newDoctorId = String(existing.doctorId);
 
-      if ((scheduledAt || duration) && await hasConflict(newDoctorId, newStart, newDuration, req.params.id)) {
+      if (
+        (scheduledAt || duration) &&
+        (await hasConflict(newDoctorId, newStart, newDuration, req.params.id))
+      ) {
         return res.status(409).json({
           success: false,
           error: 'TimeSlotUnavailable',
@@ -249,22 +251,22 @@ appointmentRoutes.put(
 
       const updated = await AppointmentModel.findByIdAndUpdate(
         req.params.id,
-        { 
-          scheduledAt: newStart, 
-          duration: newDuration, 
-          type, 
-          status, 
-          chiefComplaint, 
-          notes, 
-          encounterId 
+        {
+          scheduledAt: newStart,
+          duration: newDuration,
+          type,
+          status,
+          chiefComplaint,
+          notes,
+          encounterId,
         },
-        { new: true, runValidators: true },
+        { new: true, runValidators: true }
       ).lean();
 
       // Emit real-time events for status changes
       if (status && status !== oldStatus) {
         await emitAppointmentStatusChange(req.params.id, status, updated);
-        
+
         // Create notification
         await NotificationModel.create({
           userId: existing.patientId,
@@ -288,19 +290,19 @@ appointmentRoutes.put(
         });
       }
 
-      return res.json({ 
-        success: true, 
+      return res.json({
+        success: true,
         data: updated,
         version: '2.0',
       });
     } catch (err: any) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         success: false,
-        error: 'InternalError', 
-        message: err.message 
+        error: 'InternalError',
+        message: err.message,
       });
     }
-  },
+  }
 );
 
 // ── DELETE /appointments/:id (V2 with real-time updates) ──────────────────────
@@ -312,10 +314,10 @@ appointmentRoutes.delete(
       const { clinicId, userId } = req.user!;
       const appointment = await AppointmentModel.findOne({ _id: req.params.id, clinicId });
       if (!appointment) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           success: false,
-          error: 'NotFound', 
-          message: 'Appointment not found' 
+          error: 'NotFound',
+          message: 'Appointment not found',
         });
       }
 
@@ -329,7 +331,7 @@ appointmentRoutes.delete(
           cancelledAt: new Date(),
           cancellationReason,
         },
-        { new: true },
+        { new: true }
       ).lean();
 
       // Emit real-time cancellation event
@@ -353,7 +355,7 @@ appointmentRoutes.delete(
       ];
 
       await Promise.all(
-        notifications.map(notif =>
+        notifications.map((notif) =>
           NotificationModel.create({
             ...notif,
             clinicId: appointment.clinicId,
@@ -366,22 +368,24 @@ appointmentRoutes.delete(
         )
       );
 
-      return res.json({ 
-        success: true, 
+      return res.json({
+        success: true,
         data: updated,
         version: '2.0',
       });
     } catch (err: any) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         success: false,
-        error: 'InternalError', 
-        message: err.message 
+        error: 'InternalError',
+        message: err.message,
       });
     }
-  },
+  }
 );
 
 // Re-export other routes with V2 enhancements
-appointmentRoutes.get('/doctor/:doctorId/availability', /* same as V1 but with V2 response format */);
-appointmentRoutes.get('/:id', /* same as V1 but with V2 response format */);
-appointmentRoutes.post('/', /* same as V1 but with V2 response format and real-time events */);
+appointmentRoutes.get(
+  '/doctor/:doctorId/availability' /* same as V1 but with V2 response format */
+);
+appointmentRoutes.get('/:id' /* same as V1 but with V2 response format */);
+appointmentRoutes.post('/' /* same as V1 but with V2 response format and real-time events */);

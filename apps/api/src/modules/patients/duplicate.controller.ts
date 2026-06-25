@@ -12,7 +12,7 @@ export class DuplicateController {
     try {
       const { firstName, lastName, dateOfBirth, threshold } = req.body;
       const { clinicId } = req.user!;
-      
+
       if (!firstName || !lastName || !dateOfBirth) {
         res.status(400).json({
           success: false,
@@ -20,7 +20,7 @@ export class DuplicateController {
         });
         return;
       }
-      
+
       const matches = await DuplicateDetectionService.checkDuplicates(
         firstName,
         lastName,
@@ -28,7 +28,7 @@ export class DuplicateController {
         clinicId.toString(),
         threshold
       );
-      
+
       res.status(200).json({
         success: true,
         data: matches,
@@ -51,7 +51,7 @@ export class DuplicateController {
     try {
       const { id, duplicateId } = req.params;
       const { userId, clinicId, role } = req.user!;
-      
+
       // Only CLINIC_ADMIN can merge patients
       if (role !== 'CLINIC_ADMIN' && role !== 'SUPER_ADMIN') {
         res.status(403).json({
@@ -60,14 +60,14 @@ export class DuplicateController {
         });
         return;
       }
-      
+
       const result = await PatientMergeService.mergePatients(
         id,
         duplicateId,
         userId,
         clinicId.toString()
       );
-      
+
       res.status(200).json({
         success: true,
         message: result.message,
@@ -92,9 +92,9 @@ export class DuplicateController {
   static async getPatientWithRedirect(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      
+
       const patient = await PatientMergeService.getMergedPatient(id);
-      
+
       if (!patient) {
         res.status(404).json({
           success: false,
@@ -102,7 +102,7 @@ export class DuplicateController {
         });
         return;
       }
-      
+
       res.status(200).json({
         success: true,
         data: patient,

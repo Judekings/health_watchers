@@ -38,13 +38,19 @@ describe('calculateRiskScore', () => {
   });
 
   it('adds 15 points for diabetes diagnosis', () => {
-    const { score, factors } = calculateRiskScore({ ...base, diagnoses: ['Type 2 Diabetes Mellitus'] });
+    const { score, factors } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Type 2 Diabetes Mellitus'],
+    });
     expect(score).toBe(15);
     expect(factors).toContain('Diabetes');
   });
 
   it('adds 15 points for hypertension diagnosis', () => {
-    const { score, factors } = calculateRiskScore({ ...base, diagnoses: ['Essential Hypertension'] });
+    const { score, factors } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Essential Hypertension'],
+    });
     expect(score).toBe(15);
     expect(factors).toContain('Hypertension');
   });
@@ -56,7 +62,10 @@ describe('calculateRiskScore', () => {
   });
 
   it('does not double-count same chronic condition', () => {
-    const { score } = calculateRiskScore({ ...base, diagnoses: ['Diabetes type 1', 'Diabetes type 2'] });
+    const { score } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Diabetes type 1', 'Diabetes type 2'],
+    });
     expect(score).toBe(15);
   });
 
@@ -217,7 +226,6 @@ describe('calculateRiskScore — factorWeights', () => {
   });
 });
 
-
 describe('scoreToLevel', () => {
   it('returns low for score < 20', () => expect(scoreToLevel(0)).toBe('low'));
   it('returns low for score 19', () => expect(scoreToLevel(19)).toBe('low'));
@@ -255,13 +263,19 @@ describe('calculateRiskScore', () => {
   });
 
   it('adds 15 points for diabetes diagnosis', () => {
-    const { score, factors } = calculateRiskScore({ ...base, diagnoses: ['Type 2 Diabetes Mellitus'] });
+    const { score, factors } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Type 2 Diabetes Mellitus'],
+    });
     expect(score).toBe(15);
     expect(factors).toContain('Diabetes');
   });
 
   it('adds 15 points for hypertension diagnosis', () => {
-    const { score, factors } = calculateRiskScore({ ...base, diagnoses: ['Essential Hypertension'] });
+    const { score, factors } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Essential Hypertension'],
+    });
     expect(score).toBe(15);
     expect(factors).toContain('Hypertension');
   });
@@ -273,7 +287,10 @@ describe('calculateRiskScore', () => {
   });
 
   it('does not double-count same chronic condition', () => {
-    const { score } = calculateRiskScore({ ...base, diagnoses: ['Diabetes type 1', 'Diabetes type 2'] });
+    const { score } = calculateRiskScore({
+      ...base,
+      diagnoses: ['Diabetes type 1', 'Diabetes type 2'],
+    });
     expect(score).toBe(15);
   });
 

@@ -29,7 +29,9 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
       path: e.path,
       message: e.message,
     }));
-    res.status(400).json({ error: 'ValidationError', message: err.message, details, requestId: req.requestId });
+    res
+      .status(400)
+      .json({ error: 'ValidationError', message: err.message, details, requestId: req.requestId });
     return;
   }
 
@@ -58,13 +60,17 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   // JWT expired → 401
   if (err instanceof TokenExpiredError) {
-    res.status(401).json({ error: 'TokenExpired', message: 'Token has expired', requestId: req.requestId });
+    res
+      .status(401)
+      .json({ error: 'TokenExpired', message: 'Token has expired', requestId: req.requestId });
     return;
   }
 
   // JWT invalid → 401
   if (err instanceof JsonWebTokenError) {
-    res.status(401).json({ error: 'InvalidToken', message: 'Invalid token', requestId: req.requestId });
+    res
+      .status(401)
+      .json({ error: 'InvalidToken', message: 'Invalid token', requestId: req.requestId });
     return;
   }
 

@@ -19,7 +19,12 @@ router.use(authenticate);
 const WRITE_ROLES = requireRoles('DOCTOR', 'CLINIC_ADMIN', 'SUPER_ADMIN');
 
 /** Build a Stellar payment URI per SEP-0007 */
-function stellarPayURI(destination: string, amount: string, assetCode: string, memo: string): string {
+function stellarPayURI(
+  destination: string,
+  amount: string,
+  assetCode: string,
+  memo: string
+): string {
   const params = new URLSearchParams({
     destination,
     amount,
@@ -42,7 +47,9 @@ router.post(
     const { patientId, encounterId, lineItems, dueDate, currency } = req.body;
 
     if (!patientId || !lineItems?.length || !dueDate) {
-      return res.status(400).json({ error: 'ValidationError', message: 'patientId, lineItems, dueDate are required' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'patientId, lineItems, dueDate are required' });
     }
 
     const [clinic, settings] = await Promise.all([
@@ -52,13 +59,17 @@ router.post(
 
     const destination = settings?.stellarPublicKey ?? clinic?.stellarPublicKey;
     if (!destination) {
-      return res.status(400).json({ error: 'BadRequest', message: 'Clinic has no Stellar public key configured' });
+      return res
+        .status(400)
+        .json({ error: 'BadRequest', message: 'Clinic has no Stellar public key configured' });
     }
 
     const resolvedCurrency: 'XLM' | 'USDC' = currency ?? settings?.currency ?? 'XLM';
 
     // Compute totals
-    const computedItems = (lineItems as { description: string; quantity: number; unitPrice: string }[]).map((item) => ({
+    const computedItems = (
+      lineItems as { description: string; quantity: number; unitPrice: string }[]
+    ).map((item) => ({
       ...item,
       total: (item.quantity * parseFloat(item.unitPrice)).toFixed(7),
     }));
@@ -83,7 +94,7 @@ router.post(
     });
 
     return res.status(201).json({ status: 'success', data: invoice });
-  }),
+  })
 );
 
 // GET /invoices
@@ -100,7 +111,7 @@ router.get(
       .lean();
 
     return res.json({ status: 'success', data: invoices });
-  }),
+  })
 );
 
 // GET /invoices/:id
@@ -112,18 +123,29 @@ router.get(
       .lean();
     if (!invoice) return res.status(404).json({ error: 'NotFound', message: 'Invoice not found' });
 
-    const uri = stellarPayURI(invoice.stellarDestination, invoice.total, invoice.currency, invoice.stellarMemo);
+    const uri = stellarPayURI(
+      invoice.stellarDestination,
+      invoice.total,
+      invoice.currency,
+      invoice.stellarMemo
+    );
     const qrDataUrl = await buildQRDataUrl(uri);
 
-    return res.json({ status: 'success', data: { ...invoice, stellarPayURI: uri, qrCodeDataUrl: qrDataUrl } });
-  }),
+    return res.json({
+      status: 'success',
+      data: { ...invoice, stellarPayURI: uri, qrCodeDataUrl: qrDataUrl },
+    });
+  })
 );
 
 // GET /invoices/:id/pdf
 router.get(
   '/:id/pdf',
   asyncHandler(async (req: Request, res: Response) => {
-    const invoice = await InvoiceModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    const invoice = await InvoiceModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
     if (!invoice) return res.status(404).json({ error: 'NotFound', message: 'Invoice not found' });
 
     const [clinic, settings, patient] = await Promise.all([
@@ -132,10 +154,17 @@ router.get(
       PatientModel.findById(invoice.patientId).lean(),
     ]);
 
-    const uri = stellarPayURI(invoice.stellarDestination, invoice.total, invoice.currency, invoice.stellarMemo);
+    const uri = stellarPayURI(
+      invoice.stellarDestination,
+      invoice.total,
+      invoice.currency,
+      invoice.stellarMemo
+    );
     const qrDataUrl = await buildQRDataUrl(uri);
 
-    const patientName = patient ? `${(patient as any).firstName} ${(patient as any).lastName}` : 'Unknown';
+    const patientName = patient
+      ? `${(patient as any).firstName} ${(patient as any).lastName}`
+      : 'Unknown';
 
     const pdfStream = await generateInvoicePDF({
       invoice,
@@ -152,14 +181,17 @@ router.get(
     res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.pdf"`);
     pdfStream.pipe(res);
     return;
-  }),
+  })
 );
 
 // GET /invoices/:id/preview
 router.get(
   '/:id/preview',
   asyncHandler(async (req: Request, res: Response) => {
-    const invoice = await InvoiceModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    const invoice = await InvoiceModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
     if (!invoice) return res.status(404).json({ error: 'NotFound', message: 'Invoice not found' });
 
     const [clinic, settings, patient] = await Promise.all([
@@ -168,10 +200,17 @@ router.get(
       PatientModel.findById(invoice.patientId).lean(),
     ]);
 
-    const uri = stellarPayURI(invoice.stellarDestination, invoice.total, invoice.currency, invoice.stellarMemo);
+    const uri = stellarPayURI(
+      invoice.stellarDestination,
+      invoice.total,
+      invoice.currency,
+      invoice.stellarMemo
+    );
     const qrDataUrl = await buildQRDataUrl(uri);
 
-    const patientName = patient ? `${(patient as any).firstName} ${(patient as any).lastName}` : 'Unknown';
+    const patientName = patient
+      ? `${(patient as any).firstName} ${(patient as any).lastName}`
+      : 'Unknown';
 
     const pdfStream = await generateInvoicePDF({
       invoice,
@@ -188,7 +227,7 @@ router.get(
     res.setHeader('Content-Disposition', `inline; filename="${invoice.invoiceNumber}.pdf"`);
     pdfStream.pipe(res);
     return;
-  }),
+  })
 );
 
 // POST /invoices/:id/send — email invoice to patient
@@ -196,19 +235,31 @@ router.post(
   '/:id/send',
   WRITE_ROLES,
   asyncHandler(async (req: Request, res: Response) => {
-    const invoice = await InvoiceModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    const invoice = await InvoiceModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
     if (!invoice) return res.status(404).json({ error: 'NotFound', message: 'Invoice not found' });
     if (invoice.status === 'cancelled') {
-      return res.status(400).json({ error: 'BadRequest', message: 'Cannot send a cancelled invoice' });
+      return res
+        .status(400)
+        .json({ error: 'BadRequest', message: 'Cannot send a cancelled invoice' });
     }
 
     const patient = await PatientModel.findById(invoice.patientId).lean();
     const patientEmail = (patient as any)?.email;
     if (!patientEmail) {
-      return res.status(400).json({ error: 'BadRequest', message: 'Patient has no email address on file' });
+      return res
+        .status(400)
+        .json({ error: 'BadRequest', message: 'Patient has no email address on file' });
     }
 
-    const uri = stellarPayURI(invoice.stellarDestination, invoice.total, invoice.currency, invoice.stellarMemo);
+    const uri = stellarPayURI(
+      invoice.stellarDestination,
+      invoice.total,
+      invoice.currency,
+      invoice.stellarMemo
+    );
     const qrDataUrl = await buildQRDataUrl(uri);
 
     sendInvoiceEmail(patientEmail, {
@@ -225,7 +276,7 @@ router.post(
     }
 
     return res.json({ status: 'success', message: 'Invoice sent' });
-  }),
+  })
 );
 
 // POST /invoices/:id/mark-paid
@@ -234,11 +285,16 @@ router.post(
   WRITE_ROLES,
   asyncHandler(async (req: Request, res: Response) => {
     const { txHash } = req.body;
-    if (!txHash) return res.status(400).json({ error: 'ValidationError', message: 'txHash is required' });
+    if (!txHash)
+      return res.status(400).json({ error: 'ValidationError', message: 'txHash is required' });
 
-    const invoice = await InvoiceModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
+    const invoice = await InvoiceModel.findOne({
+      _id: req.params.id,
+      clinicId: req.user!.clinicId,
+    });
     if (!invoice) return res.status(404).json({ error: 'NotFound', message: 'Invoice not found' });
-    if (invoice.status === 'paid') return res.status(409).json({ error: 'AlreadyPaid', message: 'Invoice already paid' });
+    if (invoice.status === 'paid')
+      return res.status(409).json({ error: 'AlreadyPaid', message: 'Invoice already paid' });
 
     // Create a linked payment intent record for traceability
     const intentId = randomUUID();
@@ -258,11 +314,11 @@ router.post(
     const updated = await InvoiceModel.findByIdAndUpdate(
       invoice._id,
       { status: 'paid', paidAt: new Date(), paidTxHash: txHash, paymentIntentId: intentId },
-      { new: true },
+      { new: true }
     );
 
     return res.json({ status: 'success', data: updated });
-  }),
+  })
 );
 
 export const invoiceRoutes = router;

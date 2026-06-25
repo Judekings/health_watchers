@@ -75,12 +75,16 @@ function ReferralCard({
               <span className="ml-2 font-mono text-xs text-neutral-400">{patient.systemId}</span>
             )}
           </p>
-          <p className="text-xs text-neutral-500 mt-0.5">
+          <p className="mt-0.5 text-xs text-neutral-500">
             {direction === 'incoming' ? 'From' : 'To'}: {clinic?.name ?? '—'}
           </p>
-          <p className="text-sm text-neutral-700 mt-1">{referral.reason}</p>
-          {referral.notes && <p className="text-xs text-neutral-400 mt-0.5 italic">{referral.notes}</p>}
-          <p className="text-xs text-neutral-400 mt-1">{new Date(referral.createdAt).toLocaleDateString()}</p>
+          <p className="mt-1 text-sm text-neutral-700">{referral.reason}</p>
+          {referral.notes && (
+            <p className="mt-0.5 text-xs text-neutral-400 italic">{referral.notes}</p>
+          )}
+          <p className="mt-1 text-xs text-neutral-400">
+            {new Date(referral.createdAt).toLocaleDateString()}
+          </p>
         </div>
         <div className="flex flex-col items-end gap-2">
           <Badge variant={URGENCY_VARIANT[referral.urgency]}>{referral.urgency}</Badge>
@@ -106,19 +110,30 @@ export default function ReferralsClient() {
   const [tab, setTab] = useState<'incoming' | 'outgoing'>('incoming');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  const { data: incoming = [], isLoading: incomingLoading, error: incomingError } = useQuery<Referral[]>({
+  const {
+    data: incoming = [],
+    isLoading: incomingLoading,
+    error: incomingError,
+  } = useQuery<Referral[]>({
     queryKey: ['referrals', 'incoming'],
     queryFn: () => fetchReferrals('incoming'),
   });
 
-  const { data: outgoing = [], isLoading: outgoingLoading, error: outgoingError } = useQuery<Referral[]>({
+  const {
+    data: outgoing = [],
+    isLoading: outgoingLoading,
+    error: outgoingError,
+  } = useQuery<Referral[]>({
     queryKey: ['referrals', 'outgoing'],
     queryFn: () => fetchReferrals('outgoing'),
   });
 
   const handleAccept = async (id: string) => {
     try {
-      const res = await fetch(`${API_V1}/referrals/${id}/accept`, { method: 'PUT', credentials: 'include' });
+      const res = await fetch(`${API_V1}/referrals/${id}/accept`, {
+        method: 'PUT',
+        credentials: 'include',
+      });
       if (!res.ok) throw new Error('Failed to accept referral');
       setToast({ message: 'Referral accepted', type: 'success' });
       queryClient.invalidateQueries({ queryKey: ['referrals', 'incoming'] });
@@ -157,7 +172,7 @@ export default function ReferralsClient() {
           <TabsTrigger value="incoming">
             Incoming
             {incoming.filter((r) => r.status === 'pending').length > 0 && (
-              <span className="ml-2 rounded-full bg-warning-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+              <span className="bg-warning-500 ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white">
                 {incoming.filter((r) => r.status === 'pending').length}
               </span>
             )}
@@ -168,16 +183,27 @@ export default function ReferralsClient() {
         <TabsContent value="incoming">
           {incomingLoading ? (
             <div className="space-y-3">
-              {[1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-lg bg-neutral-100" />)}
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-24 animate-pulse rounded-lg bg-neutral-100" />
+              ))}
             </div>
           ) : incomingError ? (
-            <ErrorMessage message="Failed to load incoming referrals" onRetry={() => queryClient.invalidateQueries({ queryKey: ['referrals', 'incoming'] })} />
+            <ErrorMessage
+              message="Failed to load incoming referrals"
+              onRetry={() => queryClient.invalidateQueries({ queryKey: ['referrals', 'incoming'] })}
+            />
           ) : incoming.length === 0 ? (
             <EmptyState title="No incoming referrals" icon="📥" />
           ) : (
             <ol className="space-y-3">
               {incoming.map((r) => (
-                <ReferralCard key={r._id} referral={r} direction="incoming" onAccept={handleAccept} onDecline={handleDecline} />
+                <ReferralCard
+                  key={r._id}
+                  referral={r}
+                  direction="incoming"
+                  onAccept={handleAccept}
+                  onDecline={handleDecline}
+                />
               ))}
             </ol>
           )}
@@ -186,10 +212,15 @@ export default function ReferralsClient() {
         <TabsContent value="outgoing">
           {outgoingLoading ? (
             <div className="space-y-3">
-              {[1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-lg bg-neutral-100" />)}
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-24 animate-pulse rounded-lg bg-neutral-100" />
+              ))}
             </div>
           ) : outgoingError ? (
-            <ErrorMessage message="Failed to load outgoing referrals" onRetry={() => queryClient.invalidateQueries({ queryKey: ['referrals', 'outgoing'] })} />
+            <ErrorMessage
+              message="Failed to load outgoing referrals"
+              onRetry={() => queryClient.invalidateQueries({ queryKey: ['referrals', 'outgoing'] })}
+            />
           ) : outgoing.length === 0 ? (
             <EmptyState title="No outgoing referrals" icon="📤" />
           ) : (

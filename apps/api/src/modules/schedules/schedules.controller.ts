@@ -17,10 +17,7 @@ import {
 } from './schedules.validation';
 import { asyncHandler } from '@api/middlewares/async.handler';
 import logger from '@api/utils/logger';
-import {
-  createStaffSchedule,
-  findStaffAvailability,
-} from './staff-availability.service';
+import { createStaffSchedule, findStaffAvailability } from './staff-availability.service';
 
 const router = Router();
 router.use(authenticate);
@@ -140,7 +137,9 @@ router.post(
     }
 
     const clinicId =
-      req.user!.role === 'SUPER_ADMIN' && req.body.clinicId ? req.body.clinicId : req.user!.clinicId;
+      req.user!.role === 'SUPER_ADMIN' && req.body.clinicId
+        ? req.body.clinicId
+        : req.user!.clinicId;
     const result = await createStaffSchedule(req.body, clinicId, req.user!.userId);
     if (result.conflict) {
       return res.status(409).json({
@@ -269,7 +268,9 @@ router.get(
         doctorsScheduled: doctors.length,
         nursesScheduled: nurses.length,
         hasMinimumCoverage: doctors.length > 0,
-        onCallDoctor: onCallDoctor ? { userId: onCallDoctor.userId, name: onCallDoctor.notes } : null,
+        onCallDoctor: onCallDoctor
+          ? { userId: onCallDoctor.userId, name: onCallDoctor.notes }
+          : null,
         schedules,
       },
     });

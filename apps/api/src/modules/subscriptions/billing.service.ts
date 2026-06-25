@@ -36,7 +36,10 @@ export async function generateBillingInvoice(clinicId: string | Types.ObjectId) 
   };
 }
 
-export async function handlePaymentSuccess(clinicId: string | Types.ObjectId, paymentIntentId: string) {
+export async function handlePaymentSuccess(
+  clinicId: string | Types.ObjectId,
+  paymentIntentId: string
+) {
   const subscription = await SubscriptionModel.findOne({ clinicId });
   if (!subscription) return;
 

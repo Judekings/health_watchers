@@ -166,7 +166,12 @@ async function checkClinic(clinicId: string, publicKey: string, clinicName: stri
         title: 'Large Transaction Detected',
         message: `A large ${direction} transaction of ${tx.amount} XLM was detected.`,
         link: '/wallet',
-        metadata: { txHash: tx.hash, amount: tx.amount, direction, threshold: alerts.largeTransactionXlm },
+        metadata: {
+          txHash: tx.hash,
+          amount: tx.amount,
+          direction,
+          threshold: alerts.largeTransactionXlm,
+        },
       });
       sendLargeTransactionEmail(
         admin.email,
@@ -191,13 +196,7 @@ async function checkClinic(clinicId: string, publicKey: string, clinicName: stri
           link: '/wallet',
           metadata: { txHash: tx.hash, amount: tx.amount, from: tx.from },
         });
-        sendUnrecognizedTransactionEmail(
-          admin.email,
-          clinicName,
-          tx.amount,
-          tx.hash,
-          tx.from
-        );
+        sendUnrecognizedTransactionEmail(admin.email, clinicName, tx.amount, tx.hash, tx.from);
       }
     }
   }
@@ -237,9 +236,7 @@ export function startBalanceMonitoringJob(): void {
   );
 
   monitoringJobInterval = setInterval(() => {
-    runBalanceMonitoring().catch((err) =>
-      logger.error({ err }, 'Balance monitoring job failed')
-    );
+    runBalanceMonitoring().catch((err) => logger.error({ err }, 'Balance monitoring job failed'));
   }, CHECK_INTERVAL_MS);
 }
 

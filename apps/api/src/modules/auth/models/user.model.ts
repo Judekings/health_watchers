@@ -127,16 +127,16 @@ const userSchema = new Schema(
       emailNotifications: { type: Boolean, default: true },
       inAppNotifications: { type: Boolean, default: true },
       notificationTypes: {
-        referral_received:    { type: Boolean, default: true },
-        payment_confirmed:    { type: Boolean, default: true },
+        referral_received: { type: Boolean, default: true },
+        payment_confirmed: { type: Boolean, default: true },
         appointment_reminder: { type: Boolean, default: true },
-        ai_summary_ready:     { type: Boolean, default: true },
-        lab_result_ready:     { type: Boolean, default: true },
-        high_risk_patient:    { type: Boolean, default: true },
-        system:               { type: Boolean, default: true },
-        balance_low_warning:      { type: Boolean, default: true },
-        balance_critical:         { type: Boolean, default: true },
-        large_transaction:        { type: Boolean, default: true },
+        ai_summary_ready: { type: Boolean, default: true },
+        lab_result_ready: { type: Boolean, default: true },
+        high_risk_patient: { type: Boolean, default: true },
+        system: { type: Boolean, default: true },
+        balance_low_warning: { type: Boolean, default: true },
+        balance_critical: { type: Boolean, default: true },
+        large_transaction: { type: Boolean, default: true },
         unrecognized_transaction: { type: Boolean, default: true },
       },
     },
@@ -179,7 +179,8 @@ userSchema.pre('save', async function () {
   this.password = await bcrypt.hash(this.password, 12);
 });
 
-userSchema.index({ clinicId: 1, role: 1 });     // List users by clinic and role
+userSchema.index({ clinicId: 1, role: 1 }); // List users by clinic and role
 userSchema.index({ clinicId: 1, isActive: 1 }); // Active users per clinic
 
-export const UserModel = (models.User || model<User>('User', userSchema)) as import("mongoose").Model<User>;
+export const UserModel = (models.User ||
+  model<User>('User', userSchema)) as import('mongoose').Model<User>;

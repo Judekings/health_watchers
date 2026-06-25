@@ -91,7 +91,9 @@ test.describe('Payment Flow (Testnet)', () => {
     await page.getByLabel(/amount/i).fill('100');
     await page.getByLabel(/recipient/i).fill('GPATIENT...');
     await page.getByRole('button', { name: /create/i }).click();
-    await expect(page.getByText(/claimable.*created|balance.*created/i)).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(/claimable.*created|balance.*created/i)).toBeVisible({
+      timeout: 5_000,
+    });
 
     // Patient claims balance
     await page.getByRole('button', { name: /claim/i }).click();

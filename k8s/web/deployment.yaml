@@ -38,11 +38,11 @@ spec:
               protocol: TCP
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "250m"
+              memory: '256Mi'
+              cpu: '250m'
             limits:
-              memory: "512Mi"
-              cpu: "500m"
+              memory: '512Mi'
+              cpu: '500m'
           livenessProbe:
             httpGet:
               path: /
@@ -61,11 +61,11 @@ spec:
             failureThreshold: 3
           env:
             - name: NODE_ENV
-              value: "production"
+              value: 'production'
             - name: NEXT_TELEMETRY_DISABLED
-              value: "1"
+              value: '1'
             - name: NEXT_PUBLIC_API_URL
-              value: "https://app.healthwatchers.example.com/api"
+              value: 'https://app.healthwatchers.example.com/api'
             - name: NEXT_PUBLIC_STELLAR_NETWORK
               valueFrom:
                 configMapKeyRef:

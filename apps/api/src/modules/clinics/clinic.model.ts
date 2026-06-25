@@ -69,4 +69,5 @@ const clinicSchema = new Schema<IClinic>(
   { timestamps: true, versionKey: false }
 );
 
-export const ClinicModel = (models.Clinic || model<IClinic>('Clinic', clinicSchema)) as import("mongoose").Model<IClinic>;
+export const ClinicModel = (models.Clinic ||
+  model<IClinic>('Clinic', clinicSchema)) as import('mongoose').Model<IClinic>;

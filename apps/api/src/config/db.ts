@@ -58,7 +58,10 @@ export async function connectDB(): Promise<void> {
 /** Returns the current DB connection status for health checks */
 export function getDbStatus(): 'connected' | 'connecting' | 'disconnected' | 'disconnecting' {
   const states: Record<number, 'disconnected' | 'connected' | 'connecting' | 'disconnecting'> = {
-    0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting',
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting',
   };
   return states[mongoose.connection.readyState] ?? 'disconnected';
 }

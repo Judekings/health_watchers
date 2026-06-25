@@ -27,11 +27,30 @@ declare module 'react-native' {
   export const Dimensions: any;
   export const Linking: any;
 }
-declare module '@react-navigation/native' { export const useNavigation: any; export const useRoute: any; export const NavigationContainer: any; }
-declare module '@react-navigation/native-stack' { const createNativeStackNavigator: any; export default createNativeStackNavigator; export { createNativeStackNavigator }; }
-declare module '@react-navigation/bottom-tabs' { const createBottomTabNavigator: any; export default createBottomTabNavigator; export { createBottomTabNavigator }; }
-declare module 'axios' { const axios: any; export default axios; export type AxiosInstance = any; }
-declare module 'date-fns' { export const formatDistanceToNow: any; export const format: any; }
+declare module '@react-navigation/native' {
+  export const useNavigation: any;
+  export const useRoute: any;
+  export const NavigationContainer: any;
+}
+declare module '@react-navigation/native-stack' {
+  const createNativeStackNavigator: any;
+  export default createNativeStackNavigator;
+  export { createNativeStackNavigator };
+}
+declare module '@react-navigation/bottom-tabs' {
+  const createBottomTabNavigator: any;
+  export default createBottomTabNavigator;
+  export { createBottomTabNavigator };
+}
+declare module 'axios' {
+  const axios: any;
+  export default axios;
+  export type AxiosInstance = any;
+}
+declare module 'date-fns' {
+  export const formatDistanceToNow: any;
+  export const format: any;
+}
 declare module 'expo-notifications' {
   export function setNotificationHandler(handler: any): void;
   export function getPermissionsAsync(): Promise<any>;
@@ -41,6 +60,19 @@ declare module 'expo-notifications' {
   const _default: any;
   export default _default;
 }
-declare module 'expo-secure-store' { export const getItemAsync: any; export const setItemAsync: any; export const deleteItemAsync: any; }
-declare module '@react-native-async-storage/async-storage' { const AsyncStorage: any; export default AsyncStorage; }
-declare module 'react-query' { export const useQuery: any; export const useMutation: any; export const useQueryClient: any; export const QueryClient: any; export const QueryClientProvider: any; }
+declare module 'expo-secure-store' {
+  export const getItemAsync: any;
+  export const setItemAsync: any;
+  export const deleteItemAsync: any;
+}
+declare module '@react-native-async-storage/async-storage' {
+  const AsyncStorage: any;
+  export default AsyncStorage;
+}
+declare module 'react-query' {
+  export const useQuery: any;
+  export const useMutation: any;
+  export const useQueryClient: any;
+  export const QueryClient: any;
+  export const QueryClientProvider: any;
+}

@@ -27,10 +27,7 @@ import {
 import { DuplicateDetectionService } from './duplicate-detection.service';
 import { createAllergySchema, updateAllergySchema } from './allergy.validation';
 import { patientsCreatedTotal } from '../../services/metrics.service';
-import {
-  createInsuranceSchema,
-  updateInsuranceSchema,
-} from './insurance.validation';
+import { createInsuranceSchema, updateInsuranceSchema } from './insurance.validation';
 import {
   createEmergencyContactSchema,
   updateEmergencyContactSchema,
@@ -225,22 +222,19 @@ router.post(
     const searchName = `${firstName} ${lastName}`.toLowerCase();
     const targetClinicId = clinicId || req.user!.clinicId;
     const systemId = await nextSystemId(targetClinicId);
-    const doc = await withSpan(
-      'patient.create',
-      { 'clinic.id': targetClinicId },
-      async () =>
-        PatientModel.create({
-          systemId,
-          firstName,
-          lastName,
-          dateOfBirth: new Date(dateOfBirth),
-          sex,
-          contactNumber,
-          address,
-          clinicId: targetClinicId,
-          isActive: true,
-          searchName,
-        })
+    const doc = await withSpan('patient.create', { 'clinic.id': targetClinicId }, async () =>
+      PatientModel.create({
+        systemId,
+        firstName,
+        lastName,
+        dateOfBirth: new Date(dateOfBirth),
+        sex,
+        contactNumber,
+        address,
+        clinicId: targetClinicId,
+        isActive: true,
+        searchName,
+      })
     );
     emitToClinic(String(targetClinicId), 'patient:created', {
       patientId: String(doc._id),
@@ -1091,9 +1085,7 @@ router.delete(
     });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
-    const index = patient.insurance?.findIndex(
-      (ins) => String(ins._id) === req.params.insuranceId
-    );
+    const index = patient.insurance?.findIndex((ins) => String(ins._id) === req.params.insuranceId);
     if (index === undefined || index === -1) {
       return res.status(404).json({ error: 'NotFound', message: 'Insurance record not found' });
     }
@@ -1462,7 +1454,7 @@ router.post(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const { healthScoreService } = await import('./health-score.service');
-    const aiService = await import('../ai/ai.service') as any;
+    const aiService = (await import('../ai/ai.service')) as any;
     const healthScore = await healthScoreService.getHealthScore(req.params.id);
     if (!healthScore)
       return res.status(404).json({ error: 'NotFound', message: 'Health score not found' });
@@ -1578,9 +1570,7 @@ router.get(
     });
 
     // Factors that were present before but are gone now = improving
-    const improvedFactors = previousFactors.filter(
-      (f) => !patient.riskFactors!.includes(f)
-    );
+    const improvedFactors = previousFactors.filter((f) => !patient.riskFactors!.includes(f));
 
     // Generate AI explanation + recommendations
     const { isAIServiceAvailable, AI_DISCLAIMER } = await import('../ai/ai.service');
@@ -1635,7 +1625,8 @@ Return ONLY valid JSON (no markdown) with this exact schema:
         improvedFactors,
         naturalLanguageExplanation,
         recommendations,
-        disclaimer: 'AI-generated explanation for clinical assistance only. Not a substitute for professional medical judgment.',
+        disclaimer:
+          'AI-generated explanation for clinical assistance only. Not a substitute for professional medical judgment.',
       },
     });
   })

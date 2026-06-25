@@ -36,7 +36,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: '#ef4444',
   completed: '#8b5cf6',
   'no-show': '#f97316',
-  'patient_arrived': '#a855f7',
+  patient_arrived: '#a855f7',
 };
 
 function getWeekDays(anchor: Date): Date[] {
@@ -76,7 +76,7 @@ export default function AppointmentsClient({ labels }: { labels: Labels }) {
       .then((r) => r.json())
       .then((d) => {
         // V2 API returns enhanced response format
-        setAppointments(d?.success ? d.data.appointments : d?.data ?? []);
+        setAppointments(d?.success ? d.data.appointments : (d?.data ?? []));
         setLoading(false);
       })
       .catch(() => setLoading(false));

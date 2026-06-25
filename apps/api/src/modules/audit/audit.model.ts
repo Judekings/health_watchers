@@ -121,7 +121,7 @@ const auditLogSchema = new Schema<AuditLog>(
     timestamps: false,
     versionKey: false,
     collection: 'audit_logs',
-  },
+  }
 );
 
 // Prevent updates and deletes - immutable logs
@@ -152,4 +152,5 @@ auditLogSchema.index({ ipAddress: 1, timestamp: -1 });
 // Full-text search across action field (metadata is Mixed so not indexable as text)
 auditLogSchema.index({ action: 'text' }, { name: 'audit_text_search' });
 
-export const AuditLogModel = (models.AuditLog || model<AuditLog>('AuditLog', auditLogSchema)) as import("mongoose").Model<AuditLog>;
+export const AuditLogModel = (models.AuditLog ||
+  model<AuditLog>('AuditLog', auditLogSchema)) as import('mongoose').Model<AuditLog>;

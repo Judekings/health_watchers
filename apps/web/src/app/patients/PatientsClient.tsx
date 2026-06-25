@@ -47,7 +47,11 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
   const debounceTimer = useRef<NodeJS.Timeout>();
   const [inputValue, setInputValue] = useState('');
 
-  const { data: patients = [], isLoading, error } = useQuery({
+  const {
+    data: patients = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: queryKeys.patients.list(searchQuery || undefined),
     queryFn: async () => {
       const url = searchQuery
@@ -125,7 +129,7 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
           <div className="flex flex-col gap-4 md:hidden">
             {patients.map((p: Patient & { riskLevel?: RiskLevel; riskScore?: number }) => (
               <div key={p._id} className="rounded border border-gray-200 p-4 shadow-sm">
-                <div className="flex items-center gap-3 mb-3">
+                <div className="mb-3 flex items-center gap-3">
                   <PatientThumbnail
                     patientId={String(p._id)}
                     firstName={p.firstName}
@@ -133,7 +137,9 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                     thumbnailUrl={(p as any).thumbnailUrl}
                     size="md"
                   />
-                  <p className="font-medium text-gray-900">{p.firstName} {p.lastName}</p>
+                  <p className="font-medium text-gray-900">
+                    {p.firstName} {p.lastName}
+                  </p>
                 </div>
                 <p className="text-xs tracking-wide text-gray-500 uppercase">{labels.id}</p>
                 <p className="font-medium text-gray-900">{p.systemId}</p>
@@ -141,7 +147,9 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                 <p className="text-gray-700">{formatDate(p.dateOfBirth)}</p>
                 <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.sex}</p>
                 <p className="text-gray-700">{p.sex}</p>
-                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">{labels.contact}</p>
+                <p className="mt-2 text-xs tracking-wide text-gray-500 uppercase">
+                  {labels.contact}
+                </p>
                 <p className="text-gray-700">{p.contactNumber || 'N/A'}</p>
                 {p.riskLevel && (
                   <div className="mt-2">
@@ -163,14 +171,30 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
             <table aria-label={labels.title} className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-50">
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.id}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">Photo</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.name}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.dob}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.sex}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.contact}</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">Risk</th>
-                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">{labels.view}</th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.id}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    Photo
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.name}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.dob}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.sex}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.contact}
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    Risk
+                  </th>
+                  <th scope="col" className="border border-gray-200 px-4 py-2 text-left">
+                    {labels.view}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -186,17 +210,22 @@ export default function PatientsClient({ labels }: { labels: Labels }) {
                         size="sm"
                       />
                     </td>
-                    <td className="border border-gray-200 px-4 py-2">{p.firstName} {p.lastName}</td>
-                    <td className="border border-gray-200 px-4 py-2">{formatDate(p.dateOfBirth)}</td>
+                    <td className="border border-gray-200 px-4 py-2">
+                      {p.firstName} {p.lastName}
+                    </td>
+                    <td className="border border-gray-200 px-4 py-2">
+                      {formatDate(p.dateOfBirth)}
+                    </td>
                     <td className="border border-gray-200 px-4 py-2">{p.sex}</td>
                     <td className="border border-gray-200 px-4 py-2">{p.contactNumber || 'N/A'}</td>
                     <td className="border border-gray-200 px-4 py-2">
                       {p.riskLevel ? (
                         <Badge variant={riskVariant(p.riskLevel)}>
-                          {p.riskLevel}{p.riskScore !== undefined ? ` (${p.riskScore})` : ''}
+                          {p.riskLevel}
+                          {p.riskScore !== undefined ? ` (${p.riskScore})` : ''}
                         </Badge>
                       ) : (
-                        <span className="text-gray-400 text-xs">—</span>
+                        <span className="text-xs text-gray-400">—</span>
                       )}
                     </td>
                     <td className="border border-gray-200 px-4 py-2">

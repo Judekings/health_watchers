@@ -85,12 +85,10 @@ router.post(
       const { breachType, description, affectedRecords } = req.body;
 
       if (!breachType || !description || !affectedRecords) {
-        return res
-          .status(400)
-          .json({
-            error: 'ValidationError',
-            message: 'breachType, description, and affectedRecords are required',
-          });
+        return res.status(400).json({
+          error: 'ValidationError',
+          message: 'breachType, description, and affectedRecords are required',
+        });
       }
 
       const detectedAt = new Date();

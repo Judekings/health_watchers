@@ -20,7 +20,9 @@ export async function processReimbursementWebhook(payload: {
       { upsert: true, new: true }
     );
 
-    logger.info(`[Reimbursement] Processing claim ${payload.claimId} for ${payload.approvedAmount} ${payload.currency}`);
+    logger.info(
+      `[Reimbursement] Processing claim ${payload.claimId} for ${payload.approvedAmount} ${payload.currency}`
+    );
   } catch (err) {
     logger.error(`[Reimbursement] Error processing webhook: ${err}`);
     throw err;
@@ -69,7 +71,10 @@ export async function getOutstandingReimbursements(clinicId: string): Promise<an
   }).sort({ createdAt: -1 });
 }
 
-export async function getOverdueReimbursements(clinicId: string, daysOverdue: number = 30): Promise<any[]> {
+export async function getOverdueReimbursements(
+  clinicId: string,
+  daysOverdue: number = 30
+): Promise<any[]> {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - daysOverdue);
 
@@ -84,7 +89,11 @@ export function generateWebhookSignature(payload: string, secret: string): strin
   return crypto.createHmac('sha256', secret).update(payload).digest('hex');
 }
 
-export function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
+export function verifyWebhookSignature(
+  payload: string,
+  signature: string,
+  secret: string
+): boolean {
   const expectedSignature = generateWebhookSignature(payload, secret);
   return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
 }

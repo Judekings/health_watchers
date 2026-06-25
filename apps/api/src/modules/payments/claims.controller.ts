@@ -53,23 +53,27 @@ router.post(
       });
 
       // Audit log
-      import('../audit/audit.service').then(({ auditLog }) =>
-        auditLog(
-          {
-            action: 'INSURANCE_CLAIM_SUBMITTED',
-            userId: req.user!.userId,
-            clinicId: req.user!.clinicId,
-            resourceType: 'insurance_claim',
-            metadata: {
-              claimId: result.claimId,
-              claimAmount: req.body.claimAmount,
-              procedureCodeCount: req.body.procedureCodes.length,
-              diagnosisCodeCount: req.body.diagnosisCodes.length,
+      import('../audit/audit.service')
+        .then(({ auditLog }) =>
+          auditLog(
+            {
+              action: 'INSURANCE_CLAIM_SUBMITTED',
+              userId: req.user!.userId,
+              clinicId: req.user!.clinicId,
+              resourceType: 'insurance_claim',
+              metadata: {
+                claimId: result.claimId,
+                claimAmount: req.body.claimAmount,
+                procedureCodeCount: req.body.procedureCodes.length,
+                diagnosisCodeCount: req.body.diagnosisCodes.length,
+              },
             },
-          },
-          req
+            req
+          )
         )
-      ).catch(() => { /* non-critical */ });
+        .catch(() => {
+          /* non-critical */
+        });
 
       return res.status(201).json({
         success: true,

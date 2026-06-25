@@ -22,7 +22,9 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { patientId, encounterId, testName, testCode, notes } = req.body;
     if (!patientId || !testName) {
-      return res.status(400).json({ error: 'ValidationError', message: 'patientId and testName are required' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'patientId and testName are required' });
     }
     const doc = await LabResultModel.create({
       patientId,
@@ -36,7 +38,7 @@ router.post(
       orderedAt: new Date(),
     });
     return res.status(201).json({ status: 'success', data: doc });
-  }),
+  })
 );
 
 // GET /api/v1/lab-results — List lab results (filter by patient, status, date)
@@ -54,7 +56,7 @@ router.get(
     }
     const docs = await LabResultModel.find(filter).sort({ orderedAt: -1 });
     return res.json({ status: 'success', data: docs });
-  }),
+  })
 );
 
 // GET /api/v1/lab-results/critical — Get pending critical value acknowledgments
@@ -70,7 +72,7 @@ router.get(
       .populate('orderedBy', 'firstName lastName')
       .sort({ resultedAt: -1 });
     return res.json({ status: 'success', data: docs });
-  }),
+  })
 );
 
 // GET /api/v1/lab-results/:id — Get lab result details
@@ -80,7 +82,7 @@ router.get(
     const doc = await LabResultModel.findOne({ _id: req.params.id, clinicId: req.user!.clinicId });
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Lab result not found' });
     return res.json({ status: 'success', data: doc });
-  }),
+  })
 );
 
 // PUT /api/v1/lab-results/:id/results — Enter lab results (DOCTOR/NURSE)
@@ -90,7 +92,9 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const { results, notes, attachmentUrl } = req.body;
     if (!results || !Array.isArray(results) || results.length === 0) {
-      return res.status(400).json({ error: 'ValidationError', message: 'results array is required' });
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'results array is required' });
     }
 
     // Detect critical values
@@ -107,7 +111,7 @@ router.put(
         isCritical,
         criticalReason: isCritical ? criticalReason : undefined,
       },
-      { new: true, runValidators: true },
+      { new: true, runValidators: true }
     );
 
     if (!doc) return res.status(404).json({ error: 'NotFound', message: 'Lab result not found' });
@@ -164,7 +168,7 @@ router.put(
       data: doc,
       ...(isCritical && { alert: { critical: true, reason: criticalReason } }),
     });
-  }),
+  })
 );
 
 // POST /api/v1/lab-results/:id/acknowledge — Acknowledge critical value
@@ -178,7 +182,7 @@ router.post(
         criticalAcknowledgedBy: req.user!.userId,
         criticalAcknowledgedAt: new Date(),
       },
-      { new: true },
+      { new: true }
     );
 
     if (!doc) {
@@ -196,7 +200,7 @@ router.post(
     });
 
     return res.json({ status: 'success', data: doc });
-  }),
+  })
 );
 
 export const labResultRoutes = router;

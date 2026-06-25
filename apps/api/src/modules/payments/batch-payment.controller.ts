@@ -25,7 +25,7 @@ router.post(
     } catch (error) {
       return next(error);
     }
-  },
+  }
 );
 
 // GET /api/v1/payments/batch/:batchId
@@ -52,7 +52,7 @@ router.get(
     } catch (error) {
       return next(error);
     }
-  },
+  }
 );
 
 export const batchPaymentRouter = router;

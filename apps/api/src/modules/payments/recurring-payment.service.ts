@@ -1,5 +1,8 @@
 import { RecurringPayment } from './recurring-payment.model';
-import { CreateRecurringPaymentInput, UpdateRecurringPaymentInput } from './recurring-payment.validation';
+import {
+  CreateRecurringPaymentInput,
+  UpdateRecurringPaymentInput,
+} from './recurring-payment.validation';
 import { sendMail } from '@api/utils/mailer';
 
 function getNextPaymentDate(startDate: Date, frequency: string): Date {
@@ -21,10 +24,7 @@ function getNextPaymentDate(startDate: Date, frequency: string): Date {
   return next;
 }
 
-export async function createRecurringPayment(
-  clinicId: string,
-  input: CreateRecurringPaymentInput
-) {
+export async function createRecurringPayment(clinicId: string, input: CreateRecurringPaymentInput) {
   const startDate = new Date(input.startDate);
   const nextPaymentDate = getNextPaymentDate(startDate, input.frequency);
 

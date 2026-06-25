@@ -29,7 +29,12 @@ const consentSchema = new Schema<IConsent>(
       enum: ['treatment', 'data_sharing', 'ai_analysis', 'research', 'marketing'],
       required: true,
     },
-    status: { type: String, enum: ['granted', 'withdrawn', 'pending'], required: true, default: 'pending' },
+    status: {
+      type: String,
+      enum: ['granted', 'withdrawn', 'pending'],
+      required: true,
+      default: 'pending',
+    },
     grantedAt: { type: Date },
     withdrawnAt: { type: Date },
     expiresAt: { type: Date },
@@ -46,10 +51,14 @@ const consentSchema = new Schema<IConsent>(
 
 consentSchema.index({ patientId: 1, clinicId: 1, type: 1 }, { unique: true });
 
-export const ConsentModel = (models.Consent || model<IConsent>('Consent', consentSchema)) as import("mongoose").Model<IConsent>;
+export const ConsentModel = (models.Consent ||
+  model<IConsent>('Consent', consentSchema)) as import('mongoose').Model<IConsent>;
 
 // Current consent form versions
-export const CONSENT_TEMPLATES: Record<ConsentType, { version: string; title: string; text: string }> = {
+export const CONSENT_TEMPLATES: Record<
+  ConsentType,
+  { version: string; title: string; text: string }
+> = {
   treatment: {
     version: '1.0',
     title: 'Consent for Treatment',

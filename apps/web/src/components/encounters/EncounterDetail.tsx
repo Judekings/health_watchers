@@ -112,7 +112,7 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
           </article>
 
           <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">
+            <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-600 uppercase">
               SOAP Notes
             </h3>
             <SoapNotesView soapNotes={(encounter as any).soapNotes} />
@@ -145,17 +145,22 @@ export default function EncounterDetail({ encounter, onBack, onEdit }: Encounter
 
           {encounterPreAuths.length > 0 && (
             <article className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-              <h3 className="text-sm font-semibold tracking-wide text-gray-600 uppercase mb-3">
+              <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-600 uppercase">
                 Insurance Pre-Authorizations
               </h3>
               <ul className="space-y-2">
                 {encounterPreAuths.map((pa) => (
-                  <li key={pa._id} className="rounded-md border border-gray-200 bg-white p-3 space-y-1">
+                  <li
+                    key={pa._id}
+                    className="space-y-1 rounded-md border border-gray-200 bg-white p-3"
+                  >
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">CPT: {pa.procedureCode}</span>
                       <PreAuthStatusBadge status={pa.status} />
                     </div>
-                    <p className="text-xs text-gray-500">{pa.insuranceProvider} · {pa.estimatedAmount} XLM</p>
+                    <p className="text-xs text-gray-500">
+                      {pa.insuranceProvider} · {pa.estimatedAmount} XLM
+                    </p>
                     {pa.preAuthNumber && (
                       <p className="text-xs text-gray-500">Pre-auth #: {pa.preAuthNumber}</p>
                     )}

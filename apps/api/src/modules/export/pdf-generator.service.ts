@@ -29,9 +29,7 @@ export async function generatePatientPDF(options: PDFGenerationOptions): Promise
       .populate('attendingDoctorId', 'firstName lastName')
       .populate('prescriptions.prescribedBy', 'firstName lastName')
       .sort({ createdAt: -1 }),
-    PaymentRecordModel.find({ patientId, clinicId })
-      .sort({ createdAt: -1 })
-      .limit(50),
+    PaymentRecordModel.find({ patientId, clinicId }).sort({ createdAt: -1 }).limit(50),
     ImmunizationModel.find({ patientId, clinicId, isActive: true })
       .populate('administeredBy', 'firstName lastName')
       .sort({ administeredDate: -1 })
@@ -104,11 +102,18 @@ export async function generatePatientPDF(options: PDFGenerationOptions): Promise
     encounters.forEach((encounter, index) => {
       if (index > 0) doc.moveDown(1);
 
-      doc.fontSize(12).text(`Encounter ${index + 1} - ${new Date(encounter.createdAt ?? Date.now()).toLocaleDateString()}`, {
-        underline: true,
-      });
+      doc
+        .fontSize(12)
+        .text(
+          `Encounter ${index + 1} - ${new Date(encounter.createdAt ?? Date.now()).toLocaleDateString()}`,
+          {
+            underline: true,
+          }
+        );
       doc.fontSize(10);
-      doc.text(`Doctor: ${(encounter.attendingDoctorId as any)?.firstName || 'Unknown'} ${(encounter.attendingDoctorId as any)?.lastName || ''}`);
+      doc.text(
+        `Doctor: ${(encounter.attendingDoctorId as any)?.firstName || 'Unknown'} ${(encounter.attendingDoctorId as any)?.lastName || ''}`
+      );
       doc.text(`Chief Complaint: ${encounter.chiefComplaint}`);
       doc.text(`Status: ${encounter.status}`);
 
@@ -191,12 +196,12 @@ export async function generatePatientPDF(options: PDFGenerationOptions): Promise
         ? new Date(imm.administeredDate).toLocaleDateString()
         : 'N/A';
       doc.text(
-        `${index + 1}. ${adminDate} — ${imm.vaccineName} (CVX: ${imm.vaccineCode}), Dose ${imm.doseNumber}${imm.seriesComplete ? ' [Series Complete]' : ''} — By: ${adminName}`,
+        `${index + 1}. ${adminDate} — ${imm.vaccineName} (CVX: ${imm.vaccineCode}), Dose ${imm.doseNumber}${imm.seriesComplete ? ' [Series Complete]' : ''} — By: ${adminName}`
       );
       if (imm.lotNumber) doc.text(`   Lot #: ${imm.lotNumber}`);
       if (imm.adverseReaction) {
         doc.text(
-          `   ⚠ Adverse Reaction: ${imm.adverseReaction.description} (${imm.adverseReaction.severity})`,
+          `   ⚠ Adverse Reaction: ${imm.adverseReaction.description} (${imm.adverseReaction.severity})`
         );
       }
     });

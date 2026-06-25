@@ -33,7 +33,7 @@ spec:
           name: stellar_payment_queue_depth
         target:
           type: AverageValue
-          averageValue: "10"
+          averageValue: '10'
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 300

@@ -38,15 +38,15 @@ function statusBadgeVariant(status: string) {
 
 /** Animated dot indicator for real-time status feedback */
 function StatusIndicator({ status }: { status: string }) {
-  if (status === "pending") {
+  if (status === 'pending') {
     return (
       <span className="flex items-center gap-1.5">
-        <span className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse" aria-hidden="true" />
+        <span className="h-2 w-2 animate-pulse rounded-full bg-yellow-400" aria-hidden="true" />
         <Badge variant="warning">pending</Badge>
       </span>
     );
   }
-  if (status === "confirmed" || status === "completed") {
+  if (status === 'confirmed' || status === 'completed') {
     return (
       <span className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full bg-green-500" aria-hidden="true" />
@@ -54,7 +54,7 @@ function StatusIndicator({ status }: { status: string }) {
       </span>
     );
   }
-  if (status === "failed") {
+  if (status === 'failed') {
     return (
       <span className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full bg-red-500" aria-hidden="true" />

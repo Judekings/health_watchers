@@ -10,7 +10,7 @@ export class CoSignatureController {
   static async getPendingQueue(req: Request, res: Response): Promise<void> {
     try {
       const { userId, clinicId, role } = req.user!;
-      
+
       // Only doctors can access co-signature queue
       if (role !== 'DOCTOR') {
         res.status(403).json({
@@ -19,12 +19,12 @@ export class CoSignatureController {
         });
         return;
       }
-      
+
       const queue = await CoSignatureService.getPendingCoSignatureQueue(
         userId,
         clinicId.toString()
       );
-      
+
       res.status(200).json({
         success: true,
         data: queue,
@@ -48,7 +48,7 @@ export class CoSignatureController {
       const { id } = req.params;
       const { notes } = req.body;
       const { userId, clinicId, role } = req.user!;
-      
+
       // Only doctors can co-sign
       if (role !== 'DOCTOR') {
         res.status(403).json({
@@ -57,13 +57,9 @@ export class CoSignatureController {
         });
         return;
       }
-      
-      const encounter = await CoSignatureService.approveCoSignature(
-        id,
-        userId,
-        notes
-      );
-      
+
+      const encounter = await CoSignatureService.approveCoSignature(id, userId, notes);
+
       // Audit log
       await AuditService.log({
         userId,
@@ -78,7 +74,7 @@ export class CoSignatureController {
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
       });
-      
+
       res.status(200).json({
         success: true,
         message: 'Encounter co-signed successfully',
@@ -102,7 +98,7 @@ export class CoSignatureController {
       const { id } = req.params;
       const { notes } = req.body;
       const { userId, clinicId, role } = req.user!;
-      
+
       // Only doctors can reject co-signature
       if (role !== 'DOCTOR') {
         res.status(403).json({
@@ -111,7 +107,7 @@ export class CoSignatureController {
         });
         return;
       }
-      
+
       if (!notes) {
         res.status(400).json({
           success: false,
@@ -119,13 +115,9 @@ export class CoSignatureController {
         });
         return;
       }
-      
-      const encounter = await CoSignatureService.rejectCoSignature(
-        id,
-        userId,
-        notes
-      );
-      
+
+      const encounter = await CoSignatureService.rejectCoSignature(id, userId, notes);
+
       // Audit log
       await AuditService.log({
         userId,
@@ -140,7 +132,7 @@ export class CoSignatureController {
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
       });
-      
+
       res.status(200).json({
         success: true,
         message: 'Encounter returned for revision',

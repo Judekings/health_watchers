@@ -5,7 +5,7 @@
 
 # Global settings
 global:
-  imageRegistry: "ghcr.io/chisom92"
+  imageRegistry: 'ghcr.io/chisom92'
   imagePullPolicy: Always
   namespace: health-watchers
 
@@ -14,15 +14,15 @@ api:
   enabled: true
   image:
     repository: health-watchers-api
-    tag: "latest"
+    tag: 'latest'
   replicaCount: 2
   resources:
     requests:
-      memory: "128Mi"
-      cpu: "125m"
+      memory: '128Mi'
+      cpu: '125m'
     limits:
-      memory: "256Mi"
-      cpu: "250m"
+      memory: '256Mi'
+      cpu: '250m'
   service:
     type: ClusterIP
     port: 3001
@@ -44,35 +44,35 @@ api:
     initialDelaySeconds: 10
     periodSeconds: 10
   env:
-    NODE_ENV: "production"
-    API_PORT: "3001"
-    LOG_LEVEL: "info"
-    MAX_REQUEST_BODY_SIZE: "10kb"
-    AI_REQUEST_BODY_SIZE: "50kb"
-    MONGO_MAX_POOL_SIZE: "10"
-    JWT_ISSUER: "health-watchers-api"
-    JWT_AUDIENCE: "health-watchers-client"
-    OTEL_SAMPLING_RATE: "0.1"
+    NODE_ENV: 'production'
+    API_PORT: '3001'
+    LOG_LEVEL: 'info'
+    MAX_REQUEST_BODY_SIZE: '10kb'
+    AI_REQUEST_BODY_SIZE: '50kb'
+    MONGO_MAX_POOL_SIZE: '10'
+    JWT_ISSUER: 'health-watchers-api'
+    JWT_AUDIENCE: 'health-watchers-client'
+    OTEL_SAMPLING_RATE: '0.1'
     # Socket.IO CORS — update to your actual web frontend URL(s)
-    WEB_URL: "https://app.healthwatchers.example.com"
+    WEB_URL: 'https://app.healthwatchers.example.com'
     # Redis — required in production for distributed rate limiting across replicas
     # For managed Redis (AWS ElastiCache, etc.) update this URL
-    REDIS_URL: "redis://redis:6379"
+    REDIS_URL: 'redis://redis:6379'
 
 # ── Web Frontend ──────────────────────────────────────────────────────────────
 web:
   enabled: true
   image:
     repository: health-watchers-web
-    tag: "latest"
+    tag: 'latest'
   replicaCount: 2
   resources:
     requests:
-      memory: "256Mi"
-      cpu: "250m"
+      memory: '256Mi'
+      cpu: '250m'
     limits:
-      memory: "512Mi"
-      cpu: "500m"
+      memory: '512Mi'
+      cpu: '500m'
   service:
     type: ClusterIP
     port: 3000
@@ -88,25 +88,25 @@ web:
     initialDelaySeconds: 15
     periodSeconds: 10
   env:
-    NODE_ENV: "production"
-    NEXT_TELEMETRY_DISABLED: "1"
-    NEXT_PUBLIC_API_URL: "https://app.healthwatchers.example.com/api"
-    NEXT_PUBLIC_STELLAR_NETWORK: "mainnet"
+    NODE_ENV: 'production'
+    NEXT_TELEMETRY_DISABLED: '1'
+    NEXT_PUBLIC_API_URL: 'https://app.healthwatchers.example.com/api'
+    NEXT_PUBLIC_STELLAR_NETWORK: 'mainnet'
 
 # ── Stellar Service ───────────────────────────────────────────────────────────
 stellarService:
   enabled: true
   image:
     repository: health-watchers-stellar-service
-    tag: "latest"
+    tag: 'latest'
   replicaCount: 2
   resources:
     requests:
-      memory: "64Mi"
-      cpu: "50m"
+      memory: '64Mi'
+      cpu: '50m'
     limits:
-      memory: "128Mi"
-      cpu: "100m"
+      memory: '128Mi'
+      cpu: '100m'
   service:
     type: ClusterIP
     port: 3002
@@ -116,7 +116,7 @@ stellarService:
     maxReplicas: 10
     targetCPUUtilizationPercentage: 70
     targetMemoryUtilizationPercentage: 80
-    paymentQueueDepthThreshold: "10"
+    paymentQueueDepthThreshold: '10'
   pdb:
     enabled: true
     minAvailable: 1
@@ -129,12 +129,12 @@ stellarService:
     initialDelaySeconds: 10
     periodSeconds: 10
   env:
-    NODE_ENV: "production"
-    STELLAR_NETWORK: "mainnet"
-    MAINNET_CONFIRMED: "true"
-    STELLAR_DRY_RUN: "false"
-    STELLAR_MAX_TRANSACTION_XLM: "1000"
-    SUPPORTED_ASSETS: "XLM"
+    NODE_ENV: 'production'
+    STELLAR_NETWORK: 'mainnet'
+    MAINNET_CONFIRMED: 'true'
+    STELLAR_DRY_RUN: 'false'
+    STELLAR_MAX_TRANSACTION_XLM: '1000'
+    SUPPORTED_ASSETS: 'XLM'
 
 # ── Ingress ───────────────────────────────────────────────────────────────────
 ingress:
@@ -146,9 +146,9 @@ ingress:
     secretName: health-watchers-tls
     certManagerIssuer: letsencrypt-prod
   annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: '10m'
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
 
 # ── Secrets ───────────────────────────────────────────────────────────────────
 # Set useExternalSecrets: true to use External Secrets Operator instead of
@@ -159,19 +159,19 @@ secrets:
   externalSecretRefreshInterval: 1h
   # Inline secret values — only used when useExternalSecrets: false
   # NEVER commit real values here; use --set or a sealed-secrets solution
-  mongoUri: ""
-  jwtAccessTokenSecret: ""
-  jwtRefreshTokenSecret: ""
-  jwtSecret: ""
-  fieldEncryptionKey: ""
-  stellarSecretKey: ""
-  stellarPublicKey: ""
-  stellarPlatformPublicKey: ""
-  geminiApiKey: ""
-  smtpUser: ""
-  smtpPass: ""
-  metricsUsername: "admin"
-  metricsPassword: ""
+  mongoUri: ''
+  jwtAccessTokenSecret: ''
+  jwtRefreshTokenSecret: ''
+  jwtSecret: ''
+  fieldEncryptionKey: ''
+  stellarSecretKey: ''
+  stellarPublicKey: ''
+  stellarPlatformPublicKey: ''
+  geminiApiKey: ''
+  smtpUser: ''
+  smtpPass: ''
+  metricsUsername: 'admin'
+  metricsPassword: ''
 
 # ── Redis (optional) ──────────────────────────────────────────────────────────
 redis:
@@ -180,13 +180,13 @@ redis:
   # For production, use a managed Redis service (e.g., AWS ElastiCache).
   image:
     repository: redis
-    tag: "7.2-alpine"
+    tag: '7.2-alpine'
   resources:
     requests:
-      memory: "64Mi"
-      cpu: "50m"
+      memory: '64Mi'
+      cpu: '50m'
     limits:
-      memory: "128Mi"
-      cpu: "100m"
+      memory: '128Mi'
+      cpu: '100m'
   service:
     port: 6379

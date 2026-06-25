@@ -36,7 +36,7 @@ const fileFilter = (_req: Request, file: Express.Multer.File, cb: FileFilterCall
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits:  { fileSize: MAX_SIZE_BYTES },
+  limits: { fileSize: MAX_SIZE_BYTES },
   fileFilter,
 });
 
@@ -81,11 +81,16 @@ router.post(
 
       // multer size limit
       if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({ error: 'FileTooLarge', message: 'File exceeds the 20 MB limit.' });
+        return res
+          .status(413)
+          .json({ error: 'FileTooLarge', message: 'File exceeds the 20 MB limit.' });
       }
       // our custom file-type rejection
       if ((err as any).code === 'INVALID_FILE_TYPE') {
-        return res.status(400).json({ error: 'InvalidFileType', message: 'Only PDF, JPEG, PNG, and DICOM files are allowed.' });
+        return res.status(400).json({
+          error: 'InvalidFileType',
+          message: 'Only PDF, JPEG, PNG, and DICOM files are allowed.',
+        });
       }
       return next(err);
     });
@@ -97,20 +102,26 @@ router.post(
       }
 
       const { patientId, clinicId, documentType, documentId } = req.body as {
-        patientId: string; clinicId: string; documentType: string; documentId?: string;
+        patientId: string;
+        clinicId: string;
+        documentType: string;
+        documentId?: string;
       };
 
       if (!patientId || !clinicId || !documentType) {
-        return res.status(400).json({ error: 'BadRequest', message: 'patientId, clinicId, and documentType are required.' });
+        return res.status(400).json({
+          error: 'BadRequest',
+          message: 'patientId, clinicId, and documentType are required.',
+        });
       }
 
       // Build a unique storage key
-      const ext        = path.extname(req.file.originalname).toLowerCase();
+      const ext = path.extname(req.file.originalname).toLowerCase();
       const storageKey = `documents/${clinicId}/${patientId}/${crypto.randomUUID()}${ext}`;
 
       await uploadFile({
         storageKey,
-        buffer:   req.file.buffer,
+        buffer: req.file.buffer,
         mimeType: req.file.mimetype,
       });
 
@@ -238,7 +249,9 @@ router.get('/:id/download', authenticate, async (req: Request, res: Response) =>
         version: versionNum,
       });
       if (!versionRecord) {
-        return res.status(404).json({ error: 'NotFound', message: `Version ${versionNum} not found.` });
+        return res
+          .status(404)
+          .json({ error: 'NotFound', message: `Version ${versionNum} not found.` });
       }
       storageKey = versionRecord.storageKey;
     }
@@ -299,7 +312,7 @@ router.get('/:id/versions', authenticate, async (req: Request, res: Response) =>
 
 router.get('/_local/:storageKey', authenticate, (req: Request, res: Response) => {
   const storageKey = decodeURIComponent(req.params.storageKey);
-  const filePath   = `${config.storage.localUploadDir}/${storageKey}`;
+  const filePath = `${config.storage.localUploadDir}/${storageKey}`;
   return res.sendFile(filePath, { root: process.cwd() }, (err) => {
     if (err) res.status(404).json({ error: 'NotFound', message: 'File not found on disk.' });
   });

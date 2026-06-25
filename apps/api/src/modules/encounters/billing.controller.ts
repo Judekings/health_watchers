@@ -98,12 +98,12 @@ export async function generateClaim(req: Request, res: Response): Promise<void> 
       npiNumber: (encounter.attendingDoctorId as any).npiNumber,
     },
     serviceDate: encounter.createdAt,
-    diagnosisCodes: encounter.diagnosis.map(d => ({
+    diagnosisCodes: encounter.diagnosis.map((d) => ({
       code: d.code,
       description: d.description,
       isPrimary: d.isPrimary,
     })),
-    procedureCodes: encounter.billing.cptCodes.map(cpt => ({
+    procedureCodes: encounter.billing.cptCodes.map((cpt) => ({
       code: cpt.code,
       description: cpt.description,
       units: cpt.units,

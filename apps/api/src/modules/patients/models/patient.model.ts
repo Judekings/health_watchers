@@ -29,7 +29,15 @@ export interface IEmergencyContact {
   isPrimary: boolean;
 }
 
-export type CoverageType = 'HMO' | 'PPO' | 'EPO' | 'POS' | 'HDHP' | 'Medicare' | 'Medicaid' | 'other';
+export type CoverageType =
+  | 'HMO'
+  | 'PPO'
+  | 'EPO'
+  | 'POS'
+  | 'HDHP'
+  | 'Medicare'
+  | 'Medicaid'
+  | 'other';
 
 export interface IInsurance {
   _id?: Schema.Types.ObjectId;
@@ -246,4 +254,5 @@ patientSchema.virtual('ageGroup').get(function () {
   return 'elderly';
 });
 
-export const PatientModel = (models.Patient || model<Patient>('Patient', patientSchema)) as import("mongoose").Model<Patient>;
+export const PatientModel = (models.Patient ||
+  model<Patient>('Patient', patientSchema)) as import('mongoose').Model<Patient>;

@@ -24,7 +24,7 @@ export class CoSignatureService {
     clinicRules?: CoSignatureRules
   ): boolean {
     const rules = clinicRules || DEFAULT_RULES;
-    
+
     switch (userRole) {
       case 'ASSISTANT':
         return rules.ASSISTANT;
@@ -58,31 +58,27 @@ export class CoSignatureService {
   /**
    * Approve co-signature
    */
-  static async approveCoSignature(
-    encounterId: string,
-    doctorId: string,
-    notes?: string
-  ) {
+  static async approveCoSignature(encounterId: string, doctorId: string, notes?: string) {
     const encounter = await EncounterModel.findById(encounterId);
-    
+
     if (!encounter) {
       throw new Error('Encounter not found');
     }
-    
+
     if (!encounter.requiresCoSignature) {
       throw new Error('This encounter does not require co-signature');
     }
-    
+
     if (encounter.coSignatureStatus !== 'pending') {
       throw new Error('This encounter has already been co-signed');
     }
-    
+
     encounter.coSignedBy = new Types.ObjectId(doctorId) as any;
     encounter.coSignedAt = new Date();
     encounter.coSignatureNotes = notes;
     encounter.coSignatureStatus = 'approved';
     encounter.status = 'closed';
-    
+
     await encounter.save();
     return encounter;
   }
@@ -90,35 +86,31 @@ export class CoSignatureService {
   /**
    * Reject co-signature and return to creator
    */
-  static async rejectCoSignature(
-    encounterId: string,
-    doctorId: string,
-    notes: string
-  ) {
+  static async rejectCoSignature(encounterId: string, doctorId: string, notes: string) {
     const encounter = await EncounterModel.findById(encounterId);
-    
+
     if (!encounter) {
       throw new Error('Encounter not found');
     }
-    
+
     if (!encounter.requiresCoSignature) {
       throw new Error('This encounter does not require co-signature');
     }
-    
+
     if (encounter.coSignatureStatus !== 'pending') {
       throw new Error('This encounter has already been co-signed');
     }
-    
+
     if (!notes) {
       throw new Error('Rejection notes are required');
     }
-    
+
     encounter.coSignedBy = new Types.ObjectId(doctorId) as any;
     encounter.coSignedAt = new Date();
     encounter.coSignatureNotes = notes;
     encounter.coSignatureStatus = 'rejected';
     encounter.status = 'open'; // Return to open for revision
-    
+
     await encounter.save();
     return encounter;
   }
@@ -130,7 +122,7 @@ export class CoSignatureService {
     if (!encounter.requiresCoSignature) {
       return true;
     }
-    
+
     return encounter.coSignatureStatus === 'approved';
   }
 }
