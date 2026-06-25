@@ -7,6 +7,7 @@ export const queryKeys = {
   encounters: {
     all: ['encounters'] as const,
     list: () => [...queryKeys.encounters.all, 'list'] as const,
+    detail: (id: string) => [...queryKeys.encounters.all, 'detail', id] as const,
     byPatient: (patientId: string) => [...queryKeys.encounters.all, 'patient', patientId] as const,
   },
   payments: {
