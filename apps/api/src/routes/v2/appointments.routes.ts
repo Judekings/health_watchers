@@ -13,10 +13,7 @@ import {
   doctorIdParamsSchema,
 } from '../../modules/appointments/appointments.validation';
 import { SocketService } from '../../services/socket.service';
-import {
-  NotificationModel,
-  NOTIFICATION_TYPES,
-} from '../../modules/notifications/notification.model';
+import { NotificationModel, NOTIFICATION_TYPES } from '../../modules/notifications/notification.model';
 
 export const appointmentRoutes = Router();
 appointmentRoutes.use(authenticate);
@@ -27,25 +24,28 @@ async function hasConflict(
   doctorId: string,
   scheduledAt: Date,
   duration: number,
-  excludeId?: string
+  excludeId?: string,
 ): Promise<boolean> {
   const proposedEnd = new Date(scheduledAt.getTime() + duration * 60_000);
 
-  const query: Record<string, unknown> = {
+  const filter: Record<string, unknown> = {
     doctorId: new Types.ObjectId(doctorId),
     status: { $in: ['scheduled', 'confirmed'] },
     scheduledAt: { $lt: proposedEnd },
-    $expr: {
-      $gt: [
-        { $add: ['$scheduledAt', { $multiply: ['$duration', 60_000] }] },
-        scheduledAt.getTime(),
-      ],
-    },
   };
 
-  if (excludeId) query._id = { $ne: new Types.ObjectId(excludeId) };
+  if (excludeId) filter._id = { $ne: new Types.ObjectId(excludeId) };
 
-  return (await AppointmentModel.countDocuments(query)) > 0;
+  const candidates = await AppointmentModel.find(filter)
+    .select('scheduledAt duration')
+    .lean();
+
+  return candidates.some((appt) => {
+    const apptEnd = new Date(
+      new Date(appt.scheduledAt).getTime() + appt.duration * 60_000,
+    );
+    return apptEnd > scheduledAt;
+  });
 }
 
 async function emitAppointmentStatusChange(
@@ -69,7 +69,6 @@ async function emitAppointmentStatusChange(
       ...additionalData,
     });
 
-    // Also emit to clinic for staff notifications
     socketService.emitToClinic(appointment.clinicId.toString(), event, {
       appointmentId,
       appointment,
@@ -113,12 +112,13 @@ appointmentRoutes.post(
         { new: true, runValidators: true }
       ).lean();
 
-      // Emit real-time event
-      await emitAppointmentStatusChange(req.params.id, 'patient_arrived', updated!, {
-        checkedInAt: updated?.checkedInAt,
-      });
+      await emitAppointmentStatusChange(
+        req.params.id,
+        'patient_arrived',
+        updated,
+        { checkedInAt: updated.checkedInAt }
+      );
 
-      // Create notification for staff
       await NotificationModel.create({
         userId: appointment.doctorId,
         clinicId: appointment.clinicId,
@@ -142,7 +142,7 @@ appointmentRoutes.post(
         message: err.message,
       });
     }
-  }
+  },
 );
 
 // ── GET /appointments (V2 with enhanced response format) ──────────────────────
@@ -152,18 +152,25 @@ appointmentRoutes.get(
   async (req: Request, res: Response) => {
     try {
       const { clinicId, role, userId } = req.user!;
-      const { doctorId, patientId, status, dateFrom, dateTo, page, limit } = req.query as any;
+      const { doctorId, patientId, status, dateFrom, dateTo, page, limit } =
+        req.query as any;
 
       const filter: Record<string, unknown> = { clinicId };
 
-      // RBAC: patients can only see their own appointments
       if (role === 'PATIENT') filter.patientId = userId;
       else {
         if (doctorId) filter.doctorId = new Types.ObjectId(doctorId);
         if (patientId) filter.patientId = new Types.ObjectId(patientId);
       }
 
-      if (status) filter.status = status;
+      if (status) {
+        const ALLOWED_STATUSES = new Set(['scheduled', 'confirmed', 'cancelled', 'completed', 'patient_arrived']);
+        if (!ALLOWED_STATUSES.has(String(status))) {
+          return res.status(400).json({ error: 'ValidationError', message: 'Invalid status value' });
+        }
+        filter.status = String(status);
+      }
+
       if (dateFrom || dateTo) {
         filter.scheduledAt = {};
         if (dateFrom) (filter.scheduledAt as any).$gte = new Date(dateFrom);
@@ -182,7 +189,6 @@ appointmentRoutes.get(
         AppointmentModel.countDocuments(filter),
       ]);
 
-      // V2 enhanced response format
       return res.json({
         success: true,
         data: {
@@ -211,7 +217,7 @@ appointmentRoutes.get(
         message: err.message,
       });
     }
-  }
+  },
 );
 
 // ── PUT /appointments/:id (V2 with real-time updates) ─────────────────────────
@@ -238,10 +244,7 @@ appointmentRoutes.put(
       const newDuration = duration ?? existing.duration;
       const newDoctorId = String(existing.doctorId);
 
-      if (
-        (scheduledAt || duration) &&
-        (await hasConflict(newDoctorId, newStart, newDuration, req.params.id))
-      ) {
+      if ((scheduledAt || duration) && await hasConflict(newDoctorId, newStart, newDuration, req.params.id)) {
         return res.status(409).json({
           success: false,
           error: 'TimeSlotUnavailable',
@@ -260,14 +263,12 @@ appointmentRoutes.put(
           notes,
           encounterId,
         },
-        { new: true, runValidators: true }
+        { new: true, runValidators: true },
       ).lean();
 
-      // Emit real-time events for status changes
       if (status && status !== oldStatus) {
         await emitAppointmentStatusChange(req.params.id, status, updated);
 
-        // Create notification
         await NotificationModel.create({
           userId: existing.patientId,
           clinicId: existing.clinicId,
@@ -282,7 +283,6 @@ appointmentRoutes.put(
         });
       }
 
-      // Emit rescheduled event if time changed
       if (scheduledAt && newStart.getTime() !== oldScheduledAt.getTime()) {
         await emitAppointmentStatusChange(req.params.id, 'rescheduled', updated, {
           oldScheduledAt: oldScheduledAt.toISOString(),
@@ -302,7 +302,7 @@ appointmentRoutes.put(
         message: err.message,
       });
     }
-  }
+  },
 );
 
 // ── DELETE /appointments/:id (V2 with real-time updates) ──────────────────────
@@ -331,16 +331,14 @@ appointmentRoutes.delete(
           cancelledAt: new Date(),
           cancellationReason,
         },
-        { new: true }
+        { new: true },
       ).lean();
 
-      // Emit real-time cancellation event
       await emitAppointmentStatusChange(req.params.id, 'cancelled', updated, {
         cancelledBy: userId,
         cancellationReason,
       });
 
-      // Create notifications for both patient and doctor
       const notifications = [
         {
           userId: appointment.patientId,
@@ -355,7 +353,7 @@ appointmentRoutes.delete(
       ];
 
       await Promise.all(
-        notifications.map((notif) =>
+        notifications.map(notif =>
           NotificationModel.create({
             ...notif,
             clinicId: appointment.clinicId,
@@ -380,12 +378,10 @@ appointmentRoutes.delete(
         message: err.message,
       });
     }
-  }
+  },
 );
 
 // Re-export other routes with V2 enhancements
-appointmentRoutes.get(
-  '/doctor/:doctorId/availability' /* same as V1 but with V2 response format */
-);
-appointmentRoutes.get('/:id' /* same as V1 but with V2 response format */);
-appointmentRoutes.post('/' /* same as V1 but with V2 response format and real-time events */);
+appointmentRoutes.get('/doctor/:doctorId/availability', /* same as V1 but with V2 response format */);
+appointmentRoutes.get('/:id', /* same as V1 but with V2 response format */);
+appointmentRoutes.post('/', /* same as V1 but with V2 response format and real-time events */);

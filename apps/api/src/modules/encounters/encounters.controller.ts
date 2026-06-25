@@ -373,6 +373,7 @@ router.post(
     });
     encountersCreatedTotal.inc({ clinicId: req.user!.clinicId });
     await incrementUsage(req.user!.clinicId, 'encounterCount');
+    cache.del(dashboardCacheKey(String(req.user!.clinicId)));
 
     // Track ICD-10 codes used on this encounter so they surface in the clinic's
     // "recently used" list. Best-effort — never blocks encounter creation.
@@ -738,5 +739,13 @@ router.delete(
 // Mount attachment routes
 import { attachmentRoutes } from './attachments.controller';
 router.use('/:encounterId/attachments', attachmentRoutes);
+
+// ── Co-signature routes ───────────────────────────────────────────────────────
+import { CoSignatureController } from './cosignature.controller';
+
+router.get('/pending-cosignatures', asyncHandler(CoSignatureController.getPendingQueue));
+router.post('/:id/request-cosign', asyncHandler(CoSignatureController.requestCoSignature));
+router.post('/:id/cosign', asyncHandler(CoSignatureController.approveCoSignature));
+router.post('/:id/reject-cosign', asyncHandler(CoSignatureController.rejectCoSignature));
 
 export const encounterRoutes = router;

@@ -4,10 +4,25 @@ import { cache } from '../../services/cache.service';
 import { stellarClient } from '../payments/services/stellar-client';
 import { isAIServiceAvailable } from '../ai/ai.service';
 import { config } from '@health-watchers/config';
-import { getDbStatus } from '../../config/db';
+import { getDbStatus, getPoolMetrics } from '../../config/db';
 import { getJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-expiration-job';
 
 const router = Router();
+
+/**
+ * GET /health/startup - Startup probe: confirms the process has initialised
+ * (DB connected, app ready to serve). Used by Kubernetes startupProbe.
+ */
+router.get('/startup', (req: Request, res: Response) => {
+  const dbStatus = getDbStatus();
+  const ready = dbStatus === 'connected';
+  res.status(ready ? 200 : 503).json({
+    status: ready ? 'started' : 'starting',
+    database: dbStatus,
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
 
 /**
  * GET /health/live - Fast liveness check
@@ -33,29 +48,23 @@ router.get('/ready', async (req: Request, res: Response) => {
   const mongoStart = Date.now();
   try {
     const mongoStatus = mongoose.connection.readyState;
-    // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
     if (mongoStatus === 1) {
-      // Perform a simple ping if connected
       await mongoose.connection.db?.admin().ping();
-      const pool = (mongoose.connection as any).pool;
-      const totalConnections = pool?.totalConnectionCount ?? 0;
-      const waitQueueSize = pool?.waitQueueSize ?? 0;
-      const maxPoolSize = parseInt(process.env.MONGODB_POOL_SIZE ?? '10', 10);
-      const utilization = maxPoolSize > 0 ? totalConnections / maxPoolSize : 0;
-      const poolExhausted = waitQueueSize > 0 && totalConnections >= maxPoolSize;
+      const pool = getPoolMetrics();
+      const poolExhausted = pool.waitQueueSize > 0 && pool.totalConnections >= pool.maxPoolSize;
 
       if (poolExhausted) {
         isReady = false;
         checks.mongodb = {
           status: 'unhealthy',
           message: 'Connection pool exhausted',
-          pool: { totalConnections, waitQueueSize, maxPoolSize, utilization },
+          pool,
           latency: Date.now() - mongoStart,
         };
       } else {
         checks.mongodb = {
           status: 'healthy',
-          pool: { totalConnections, waitQueueSize, maxPoolSize, utilization },
+          pool,
           latency: Date.now() - mongoStart,
         };
       }
@@ -90,10 +99,10 @@ router.get('/ready', async (req: Request, res: Response) => {
       network: stellarHealth.network,
     };
   } catch (err) {
-    checks.stellarHorizon = {
-      status: 'degraded',
+    checks.stellarHorizon = { 
+      status: 'degraded', 
       message: err instanceof Error ? err.message : 'Connection failed',
-      latency: Date.now() - stellarStart,
+      latency: Date.now() - stellarStart 
     };
   }
 

@@ -13,6 +13,18 @@ import { FeeEstimateDisplay } from '@/components/payments/FeeEstimateDisplay';
 
 type FeeStrategy = 'slow' | 'standard' | 'fast';
 
+/** A single payment path returned by GET /payments/paths. */
+export interface PaymentPath {
+  sourceAssetCode: string;
+  sourceAssetIssuer?: string;
+  sourceAmount: string;
+  destinationAssetCode: string;
+  destinationAssetIssuer?: string;
+  destinationAmount: string;
+  /** Intermediate hop asset codes, e.g. ['yXLM', 'EURT']. */
+  path: string[];
+}
+
 const schema = z.object({
   patientId: z.string().min(1, 'Patient is required'),
   amount: z.string().regex(/^\d+(\.\d{1,7})?$/, 'Enter a valid amount (e.g. 10.50)'),
@@ -41,18 +53,16 @@ interface Props {
 }
 
 export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
-  const [pathEstimate, setPathEstimate] = useState<any>(null);
-  const [paths, setPaths] = useState<any[]>([]);
+  const [paths, setPaths] = useState<PaymentPath[]>([]);
   const [selectedPathIndex, setSelectedPathIndex] = useState<number | null>(null);
   const [loadingPath, setLoadingPath] = useState(false);
-  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
   const [feeStrategy, setFeeStrategy] = useState<FeeStrategy>('standard');
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const {
     register,
     handleSubmit,
     watch,
-    setValue,
     formState: { errors, isSubmitting },
     setError,
   } = useForm<z.infer<typeof schema>>({
@@ -66,11 +76,16 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
   const patientId = watch('patientId');
   const slippage = watch('slippage') || '1';
 
-  const fetchPath = useCallback(async () => {
-    if (!amount || !payWithAsset || !destinationAsset) return;
-    if (payWithAsset === destinationAsset) {
-      setPathEstimate(null);
-      setExchangeRate(null);
+  const isPathPayment = payWithAsset !== destinationAsset;
+  const selectedPath = selectedPathIndex !== null ? (paths[selectedPathIndex] ?? null) : null;
+  const exchangeRate =
+    selectedPath && amount ? parseFloat(selectedPath.sourceAmount) / parseFloat(amount) : null;
+
+  const fetchPaths = useCallback(async () => {
+    // Only path payments (source != destination) need path discovery.
+    if (!amount || !payWithAsset || !destinationAsset || payWithAsset === destinationAsset) {
+      setPaths([]);
+      setSelectedPathIndex(null);
       return;
     }
 
@@ -78,55 +93,52 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
     try {
       const query = new URLSearchParams({
         sourceAsset: payWithAsset,
-        destinationAsset: destinationAsset,
-        amount: amount,
+        destinationAsset,
+        amount,
       });
       const res = await fetch(`${API_V1}/payments/paths?${query}`);
       const data = await res.json();
-      if (data.status === 'success' && data.data.length > 0) {
-        const allPaths = data.data;
-        setPaths(allPaths);
-        // default to first path
-        setSelectedPathIndex(0);
-        const bestPath = allPaths[0];
-        setPathEstimate(bestPath);
-        const rate = parseFloat(bestPath.sourceAmount) / parseFloat(amount);
-        setExchangeRate(rate);
+      if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
+        setPaths(data.data as PaymentPath[]);
+        setSelectedPathIndex(0); // default to the best (first) path
       } else {
         setPaths([]);
         setSelectedPathIndex(null);
-        setPathEstimate(null);
-        setExchangeRate(null);
       }
     } catch (err) {
-      console.error('Failed to fetch path:', err);
+      console.error('Failed to fetch payment paths:', err);
+      setPaths([]);
+      setSelectedPathIndex(null);
     } finally {
       setLoadingPath(false);
     }
   }, [amount, payWithAsset, destinationAsset]);
 
-  // Initial fetch and refresh every 30s
+  // Refresh paths on input change and every 30s (rates move).
   useEffect(() => {
-    fetchPath();
-    const interval = setInterval(fetchPath, 30000);
+    fetchPaths();
+    const interval = setInterval(fetchPaths, 30000);
     return () => clearInterval(interval);
-  }, [fetchPath]);
+  }, [fetchPaths]);
 
-  const submit = async (data: z.infer<typeof schema>) => {
+  const submit = async (formData: z.infer<typeof schema>) => {
+    const data = { ...formData } as PaymentIntentData;
     try {
-      if (pathEstimate && selectedPathIndex !== null) {
-        const chosen = paths[selectedPathIndex] ?? pathEstimate;
-        // Apply slippage to source amount
-        const slipFactor = 1 + parseFloat(slippage) / 100;
-        const maxSourceAmount = (parseFloat(chosen.sourceAmount) * slipFactor).toFixed(7);
+      const payload: PaymentIntentData = { ...data, feeStrategy };
 
-        data.sourceAssetCode = chosen.sourceAssetCode;
-        data.sourceAssetIssuer = chosen.sourceAssetIssuer;
-        data.destinationAmount = amount;
-        data.maxSourceAmount = maxSourceAmount;
-        data.path = chosen.path;
+      if (isPathPayment && selectedPath) {
+        // Apply slippage tolerance to the source amount the patient is willing to spend.
+        const slipFactor = 1 + parseFloat(slippage) / 100;
+        const maxSourceAmount = (parseFloat(selectedPath.sourceAmount) * slipFactor).toFixed(7);
+
+        payload.sourceAssetCode = selectedPath.sourceAssetCode;
+        payload.sourceAssetIssuer = selectedPath.sourceAssetIssuer;
+        payload.destinationAmount = amount;
+        payload.maxSourceAmount = maxSourceAmount;
+        payload.path = selectedPath.path;
       }
-      await onSubmit({ ...data, feeStrategy });
+
+      await onSubmit(payload);
     } catch (err) {
       setError('root', {
         message: err instanceof Error ? err.message : 'Failed to create payment intent.',
@@ -134,14 +146,11 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
     }
   };
 
-  const [showConfirm, setShowConfirm] = useState(false);
-
   const handleCreateClick = () => {
-    // If this is a path payment, show confirmation modal; otherwise submit immediately
-    if (payWithAsset !== destinationAsset && pathEstimate) {
+    // Path payments get an explicit confirmation step; same-asset payments submit directly.
+    if (isPathPayment && selectedPath) {
       setShowConfirm(true);
     } else {
-      // trigger normal submit
       handleSubmit(submit)();
     }
   };
@@ -172,6 +181,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
             error={errors.amount?.message}
           />
           <AssetSelector
+            id="receive-asset"
             label="Receive Asset"
             {...register('asset')}
             error={errors.asset?.message}
@@ -180,6 +190,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
 
         <div className="grid grid-cols-2 gap-3">
           <AssetSelector
+            id="pay-with-asset"
             label="Pay with Asset"
             {...register('payWithAsset')}
             error={errors.payWithAsset?.message}
@@ -194,45 +205,55 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
           />
         </div>
 
-        {payWithAsset !== destinationAsset && amount && (
-          <div className="bg-primary-50 rounded-md p-3 text-sm">
+        {isPathPayment && amount && (
+          <div className="rounded-md bg-primary-50 p-3 text-sm">
             {loadingPath ? (
-              <p className="text-primary-700 animate-pulse">Calculating best paths...</p>
+              <p className="animate-pulse text-primary-700">Calculating best paths...</p>
             ) : paths.length > 0 ? (
-              <div className="space-y-2">
-                <div className="text-primary-600 font-medium">Available Paths</div>
+              <fieldset className="space-y-2">
+                <legend className="text-primary-600 font-medium">Available Paths</legend>
                 <div className="space-y-2">
                   {paths.map((p, idx) => {
                     const rate = parseFloat(p.sourceAmount) / parseFloat(amount);
+                    const hops = p.path.length;
                     return (
                       <label
                         key={idx}
-                        className={`flex cursor-pointer items-center justify-between rounded-md border p-2 ${selectedPathIndex === idx ? 'border-primary-400 bg-white' : 'border-transparent'}`}
+                        className={`flex items-center justify-between rounded-md border p-2 cursor-pointer ${
+                          selectedPathIndex === idx
+                            ? 'border-primary-400 bg-white'
+                            : 'border-transparent'
+                        }`}
                       >
                         <div>
                           <div className="text-sm font-semibold">
                             {p.sourceAmount} {payWithAsset}
                           </div>
-                          <div className="text-primary-500 text-xs">
+                          <div className="text-xs text-primary-500">
                             1 {destinationAsset} ≈ {rate.toFixed(4)} {payWithAsset}
+                          </div>
+                          <div className="text-xs text-primary-400">
+                            {hops === 0
+                              ? 'Direct conversion'
+                              : `via ${p.path.join(' → ')} (${hops} hop${hops > 1 ? 's' : ''})`}
                           </div>
                         </div>
                         <input
                           type="radio"
                           name="selectedPath"
+                          value={idx}
                           checked={selectedPathIndex === idx}
-                          onChange={() => {
-                            setSelectedPathIndex(idx);
-                            setPathEstimate(p);
-                            setExchangeRate(rate);
-                          }}
+                          onChange={() => setSelectedPathIndex(idx)}
                           className="ml-3"
                         />
                       </label>
                     );
                   })}
                 </div>
-              </div>
+                <p className="text-xs text-primary-400">
+                  Rates refresh automatically. Network fees are paid separately in XLM.
+                </p>
+              </fieldset>
             ) : (
               <p className="text-danger-600">No liquidity found for this conversion.</p>
             )}
@@ -247,10 +268,8 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
           helperText="Visible on the Stellar network"
         />
 
-        {/* Fee estimate — only shown for XLM payments */}
-        {asset === 'XLM' && (
-          <FeeEstimateDisplay selected={feeStrategy} onChange={setFeeStrategy} amount={amount} />
-        )}
+        {/* Network fees are always paid in XLM, for both direct and path payments. */}
+        <FeeEstimateDisplay selected={feeStrategy} onChange={setFeeStrategy} amount={amount} />
 
         {/* Summary box — shown once amount + patient are filled */}
         {amount && patientId && (
@@ -266,21 +285,27 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
                 {amount} {destinationAsset}
               </span>
             </div>
-            {pathEstimate && (
-              <div className="flex justify-between text-neutral-600">
-                <span>Patient Pays (Estimated)</span>
-                <span className="font-semibold text-neutral-900">
-                  {pathEstimate.sourceAmount} {payWithAsset}
-                </span>
-              </div>
+            {selectedPath && (
+              <>
+                <div className="flex justify-between text-neutral-600">
+                  <span>Patient Pays (Estimated)</span>
+                  <span className="font-semibold text-neutral-900">
+                    {selectedPath.sourceAmount} {payWithAsset}
+                  </span>
+                </div>
+                <div className="flex justify-between text-neutral-600">
+                  <span>Exchange Rate</span>
+                  <span>
+                    1 {destinationAsset} ≈ {exchangeRate?.toFixed(4)} {payWithAsset}
+                  </span>
+                </div>
+              </>
             )}
-            {asset === 'XLM' && (
-              <div className="flex justify-between text-neutral-600">
-                <span>Fee speed</span>
-                <span className="capitalize">{feeStrategy}</span>
-              </div>
-            )}
-            <p className="pt-1 text-xs text-neutral-400">
+            <div className="flex justify-between text-neutral-600">
+              <span>Fee speed</span>
+              <span className="capitalize">{feeStrategy}</span>
+            </div>
+            <p className="text-xs text-neutral-400 pt-1">
               Review carefully — Stellar transactions cannot be reversed.
             </p>
           </div>
@@ -302,7 +327,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
             className="flex-1"
             loading={isSubmitting}
             onClick={handleCreateClick}
-            disabled={payWithAsset !== destinationAsset && !pathEstimate && !loadingPath}
+            disabled={isPathPayment && !selectedPath && !loadingPath}
           >
             {isSubmitting ? 'Submitting…' : 'Create Payment Intent'}
           </Button>
@@ -315,12 +340,12 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
             You are creating a path payment. Review the estimated source amount and exchange rate
             before proceeding.
           </p>
-          {pathEstimate && (
+          {selectedPath && (
             <div className="rounded-md border p-3">
               <div className="flex justify-between">
                 <span className="text-sm">Estimated Patient Pays</span>
                 <span className="font-bold">
-                  {pathEstimate.sourceAmount} {payWithAsset}
+                  {selectedPath.sourceAmount} {payWithAsset}
                 </span>
               </div>
               <div className="mt-1 flex justify-between text-xs text-neutral-500">
@@ -328,6 +353,10 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
                 <span>
                   1 {destinationAsset} ≈ {exchangeRate?.toFixed(4)} {payWithAsset}
                 </span>
+              </div>
+              <div className="mt-1 flex justify-between text-xs text-neutral-500">
+                <span>Slippage Tolerance</span>
+                <span>{slippage}%</span>
               </div>
             </div>
           )}
@@ -339,12 +368,13 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
             <Button
               variant="primary"
               className="flex-1"
+              loading={isSubmitting}
               onClick={async () => {
                 setShowConfirm(false);
                 await handleSubmit(submit)();
               }}
             >
-              Confirm & Create
+              Confirm &amp; Create
             </Button>
           </div>
         </div>

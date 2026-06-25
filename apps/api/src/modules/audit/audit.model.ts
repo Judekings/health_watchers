@@ -35,19 +35,7 @@ export type AuditAction =
   | 'CLINIC_SWITCH'
   | 'DATA_EXPORT_REQUEST'
   | 'DATA_EXPORT_FULFILLED'
-  | 'COMMUNICATION_LOG_VIEWED'
-  | 'VIEW'
-  | 'cosign_approve'
-  | 'cosign_reject'
-  | 'INSURANCE_CREATE'
-  | 'INSURANCE_UPDATE'
-  | 'INSURANCE_DELETE'
-  | 'patient_merge'
-  | 'INSURANCE_CLAIM_SUBMITTED'
-  | 'EXPORT_RESEARCH_DATA'
-  | 'research_export'
-  | 'COMMUNICATION_LOG_CREATED'
-  | 'BATCH_PAYMENT_CREATED';
+  | 'CONSENT_VERSION_ACCEPTED';
 
 export interface AuditLog {
   userId?: Types.ObjectId;
@@ -121,7 +109,7 @@ const auditLogSchema = new Schema<AuditLog>(
     timestamps: false,
     versionKey: false,
     collection: 'audit_logs',
-  }
+  },
 );
 
 // Prevent updates and deletes - immutable logs
@@ -152,5 +140,4 @@ auditLogSchema.index({ ipAddress: 1, timestamp: -1 });
 // Full-text search across action field (metadata is Mixed so not indexable as text)
 auditLogSchema.index({ action: 'text' }, { name: 'audit_text_search' });
 
-export const AuditLogModel = (models.AuditLog ||
-  model<AuditLog>('AuditLog', auditLogSchema)) as import('mongoose').Model<AuditLog>;
+export const AuditLogModel = models.AuditLog || model<AuditLog>('AuditLog', auditLogSchema);
