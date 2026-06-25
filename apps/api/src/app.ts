@@ -84,6 +84,10 @@ import {
   stopClaimableExpiryNotificationJob,
 } from './modules/payments/services/claimable-expiry-notification-job';
 import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
+import {
+  startPaymentRetryJob,
+  stopPaymentRetryJob,
+} from './modules/payments/services/payment-retry.service';
 import { getCacheMetrics } from './services/cache.service';
 import {
   mongodbConnectionPoolSize,
@@ -330,6 +334,7 @@ async function startServer() {
   startAppointmentReminderJob();
   startClaimableExpiryNotificationJob();
   startXLMRateJob();
+  startPaymentRetryJob();
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
@@ -358,6 +363,7 @@ async function startServer() {
         stopAppointmentReminderJob();
         stopClaimableExpiryNotificationJob();
         stopXLMRateJob();
+        stopPaymentRetryJob();
         logger.info('All background jobs stopped');
 
         // Close database connection
