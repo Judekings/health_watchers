@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Error as MongooseError } from 'mongoose';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import { ZodError } from 'zod';
+import * as Sentry from '@sentry/node';
 import logger from '../utils/logger';
 import { AppError, ErrorSeverity } from '../utils/app-error';
 
@@ -133,8 +134,13 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     return;
   }
 
-  // Fallback: unhandled internal error
-  logger.error({ ...ctx, err }, 'Unhandled error');
+  if (isDev) {
+    logger.error({ err }, 'Unhandled error');
+  }
+
+  // Report unexpected errors to Sentry (skips 4xx — those are expected)
+  Sentry.captureException(err);
+
   const stack = isDev && err instanceof Error ? err.stack : undefined;
   res.status(500).json({
     error: 'InternalServerError',

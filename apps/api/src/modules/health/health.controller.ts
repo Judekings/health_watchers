@@ -10,6 +10,21 @@ import { getJobStatus, CHECK_INTERVAL_MS } from '../payments/services/payment-ex
 const router = Router();
 
 /**
+ * GET /health/startup - Startup probe: confirms the process has initialised
+ * (DB connected, app ready to serve). Used by Kubernetes startupProbe.
+ */
+router.get('/startup', (req: Request, res: Response) => {
+  const dbStatus = getDbStatus();
+  const ready = dbStatus === 'connected';
+  res.status(ready ? 200 : 503).json({
+    status: ready ? 'started' : 'starting',
+    database: dbStatus,
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
  * GET /health/live - Fast liveness check
  */
 router.get('/live', (req: Request, res: Response) => {

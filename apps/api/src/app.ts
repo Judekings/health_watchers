@@ -1,4 +1,5 @@
 import './tracing'; // must be first — initialises OpenTelemetry SDK before any other import
+import './instrument'; // must be first — initialises Sentry before any other module
 import './config/env'; // must be second — validates env vars
 
 import crypto from 'crypto';
@@ -84,6 +85,10 @@ import {
   stopClaimableExpiryNotificationJob,
 } from './modules/payments/services/claimable-expiry-notification-job';
 import { startXLMRateJob, stopXLMRateJob } from './modules/payments/services/xlm-rate-job';
+import {
+  startMfaGracePeriodJob,
+  stopMfaGracePeriodJob,
+} from './modules/auth/mfa-grace-period-job';
 import { getCacheMetrics } from './services/cache.service';
 import {
   mongodbConnectionPoolSize,
@@ -189,7 +194,11 @@ app.use(
     logger,
     genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
     autoLogging: {
-      ignore: (req) => isProd && (req.url === '/health/live' || req.url === '/health/ready'),
+      ignore: (req) =>
+        isProd &&
+        (req.url === '/health/live' ||
+          req.url === '/health/ready' ||
+          req.url === '/health/startup'),
     },
     redact: ['req.headers.authorization'],
   })
@@ -330,6 +339,7 @@ async function startServer() {
   startAppointmentReminderJob();
   startClaimableExpiryNotificationJob();
   startXLMRateJob();
+  startMfaGracePeriodJob();
 
   // Track MongoDB connection pool metrics for Prometheus
   setInterval(() => {
@@ -356,6 +366,7 @@ async function startServer() {
         stopAppointmentReminderJob();
         stopClaimableExpiryNotificationJob();
         stopXLMRateJob();
+        stopMfaGracePeriodJob();
         logger.info('All background jobs stopped');
 
         // Close database connection
