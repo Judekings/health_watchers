@@ -12,15 +12,17 @@ export interface ApiVersion {
 export const API_VERSIONS: ApiVersion[] = [
   {
     version: 'v1',
-    status: 'current',
+    status: 'deprecated',
     baseUrl: '/api/v1',
     releaseDate: '2024-01-01',
+    deprecationDate: '2025-12-01',
+    sunsetDate: '2026-12-01',
   },
   {
     version: 'v2',
     status: 'current',
     baseUrl: '/api/v2',
-    releaseDate: '2024-12-01',
+    releaseDate: '2025-12-01',
   },
 ];
 
