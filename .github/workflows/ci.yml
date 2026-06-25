@@ -314,6 +314,15 @@ jobs:
           path: apps/web/test-results/
           retention-days: 7
 
+      - name: Upload payment-flow test videos on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: payment-flow-videos
+          path: apps/web/test-results/payment-flow/
+          retention-days: 14
+          if-no-files-found: ignore
+
   # Stage 6: Deploy (main branch only)
   deploy-staging:
     name: Deploy to Staging
