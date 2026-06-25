@@ -31,7 +31,7 @@ const clinicFeeBudgetSchema = new Schema<IClinicFeeBudget>(
 clinicFeeBudgetSchema.index({ clinicId: 1, month: 1 }, { unique: true });
 
 export const ClinicFeeBudgetModel =
-  models.ClinicFeeBudget || model<IClinicFeeBudget>('ClinicFeeBudget', clinicFeeBudgetSchema);
+  (models.ClinicFeeBudget || model<IClinicFeeBudget>('ClinicFeeBudget', clinicFeeBudgetSchema)) as import("mongoose").Model<IClinicFeeBudget>;
 
 export function getCurrentMonth(): string {
   return new Date().toISOString().slice(0, 7); // YYYY-MM

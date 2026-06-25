@@ -37,4 +37,4 @@ const waitlistSchema = new Schema<IWaitlist>(
 waitlistSchema.index({ clinicId: 1, status: 1, priority: -1, addedAt: 1 });
 waitlistSchema.index({ clinicId: 1, doctorId: 1, status: 1 });
 
-export const WaitlistModel = models.Waitlist || model<IWaitlist>('Waitlist', waitlistSchema);
+export const WaitlistModel = (models.Waitlist || model<IWaitlist>('Waitlist', waitlistSchema)) as import("mongoose").Model<IWaitlist>;

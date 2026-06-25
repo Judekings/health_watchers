@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { authenticate } from '../../middleware/authenticate';
-import { requireRoles } from '../../middleware/requireRoles';
-import { validate } from '../../middleware/validate';
+import { authenticate } from '@api/middlewares/auth.middleware';
+import { requireRoles } from '@api/middlewares/auth.middleware';
+import { validateRequest as validate } from '@api/middlewares/validate.middleware';
 import { batchPaymentService } from './batch-payment.service';
 import { createBatchPaymentSchema } from './batch-payment.validation';
 
@@ -12,18 +12,18 @@ router.post(
   '/',
   authenticate,
   requireRoles('CLINIC_ADMIN', 'SUPER_ADMIN'),
-  validate(createBatchPaymentSchema),
+  validate({ body: createBatchPaymentSchema }),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const user = (req as any).user;
       const batch = await batchPaymentService.createBatch(req.body, user);
 
-      res.status(201).json({
+      return res.status(201).json({
         status: 'success',
         data: batch,
       });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   },
 );
@@ -45,12 +45,12 @@ router.get(
         });
       }
 
-      res.json({
+      return res.json({
         status: 'success',
         data: batch,
       });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   },
 );

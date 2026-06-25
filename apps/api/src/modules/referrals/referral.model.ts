@@ -63,4 +63,4 @@ ReferralSchema.index({ outcome: 1, outcomeDate: -1 });
 ReferralSchema.index({ toClinicId: 1, outcome: 1 });
 
 export const ReferralModel =
-  mongoose.models.Referral || mongoose.model<IReferral>('Referral', ReferralSchema);
+  (mongoose.models.Referral || mongoose.model<IReferral>('Referral', ReferralSchema)) as import("mongoose").Model<IReferral>;

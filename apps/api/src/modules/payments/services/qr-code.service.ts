@@ -51,7 +51,7 @@ export class QRCodeService {
       ...options,
     };
 
-    return QRCode.toBuffer(data, defaultOptions);
+    return QRCode.toBuffer(data, defaultOptions as unknown as import('qrcode').QRCodeToBufferOptions);
   }
 
   /**
@@ -78,7 +78,7 @@ export class QRCodeService {
   static async generateQRCodeSVG(data: string): Promise<string> {
     return QRCode.toString(data, {
       errorCorrectionLevel: 'H',
-      type: 'image/svg+xml',
+      type: 'svg',
       width: 300,
       margin: 2,
     });

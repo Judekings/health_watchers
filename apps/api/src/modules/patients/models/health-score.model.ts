@@ -59,4 +59,4 @@ healthScoreSchema.index({ clinicId: 1, healthScore: 1 });
 healthScoreSchema.index({ healthScoreLastCalculated: 1 });
 
 export const HealthScoreModel =
-  models.HealthScore || model<IHealthScore>('HealthScore', healthScoreSchema);
+  (models.HealthScore || model<IHealthScore>('HealthScore', healthScoreSchema)) as import("mongoose").Model<IHealthScore>;

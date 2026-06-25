@@ -22,7 +22,7 @@ export async function processReimbursementWebhook(payload: {
 
     logger.info(`[Reimbursement] Processing claim ${payload.claimId} for ${payload.approvedAmount} ${payload.currency}`);
   } catch (err) {
-    logger.error('[Reimbursement] Error processing webhook:', err);
+    logger.error(`[Reimbursement] Error processing webhook: ${err}`);
     throw err;
   }
 }
@@ -58,7 +58,7 @@ export async function matchPaymentToReimbursement(
       logger.warn(`[Reimbursement] No reimbursement found for claim ${claimId}`);
     }
   } catch (err) {
-    logger.error('[Reimbursement] Error matching payment:', err);
+    logger.error(`[Reimbursement] Error matching payment: ${err}`);
   }
 }
 

@@ -101,7 +101,7 @@ app.use((req, _res, next) => {
 app.use(
   pinoHttp({
     logger,
-    genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
+    genReqId: (req: any) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
     redact: ['req.headers.authorization'],
   })
 );

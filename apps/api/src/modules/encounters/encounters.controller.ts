@@ -163,7 +163,7 @@ router.get(
 
     // Boolean filters
     if (hasAiSummary === true) {
-      matchStage.aiSummary = { $exists: true, $ne: null, $ne: '' };
+      matchStage.aiSummary = { $exists: true, $ne: '' };
     }
     if (hasPrescriptions === true) {
       matchStage['prescriptions.0'] = { $exists: true };
@@ -186,7 +186,7 @@ router.get(
     const skip = (page - 1) * limit;
 
     // ── Aggregation pipeline with patient name lookup ─────────────────────────
-    const pipeline: object[] = [
+    const pipeline: import('mongoose').PipelineStage[] = [
       { $match: matchStage },
       ...(q ? [{ $addFields: { score: { $meta: 'textScore' } } }] : []),
       {
@@ -198,8 +198,8 @@ router.get(
           pipeline: [{ $project: { firstName: 1, lastName: 1, systemId: 1 } }],
         },
       },
-      { $unwind: { path: '$patientInfo', preserveNullAndEmpty: true } },
-      { $sort: sortStage },
+      { $unwind: { path: '$patientInfo', preserveNullAndEmptyArrays: true } },
+      { $sort: sortStage as import('mongoose').PipelineStage.Sort['$sort'] },
       {
         $facet: {
           data: [{ $skip: skip }, { $limit: limit }],
@@ -256,7 +256,7 @@ router.post(
           req.body.vitalSigns = template.defaultVitalSigns;
         }
         if (!req.body.diagnosis?.length && template.suggestedDiagnoses?.length) {
-          req.body.diagnosis = template.suggestedDiagnoses.map((d, i) => ({
+          req.body.diagnosis = template.suggestedDiagnoses.map((d: any, i: number) => ({
             ...d,
             isPrimary: i === 0,
           }));
@@ -366,10 +366,10 @@ router.post(
     }
 
     // Evaluate CDS rules for encounter creation
-    const patientContext = await cdsRulesEngine.getPatientContext(req.body.patientId, req.user!.clinicId);
+    const patientContext = await cdsRulesEngine.getPatientContext(req.body.patientId as any, req.user!.clinicId as any);
     const cdsAlerts = await cdsRulesEngine.evaluateRules('encounter_create', {
-      patientId: req.body.patientId,
-      clinicId: req.user!.clinicId,
+      patientId: req.body.patientId as any,
+      clinicId: req.user!.clinicId as any,
       vitalSigns: req.body.vitalSigns,
       ...patientContext,
     });
@@ -463,7 +463,7 @@ router.patch(
 
     emitToClinic(req.user!.clinicId, 'encounter:updated', { encounterId: req.params.id });
     // Trigger survey if encounter is being closed
-    if (updateData.status === 'closed' && encounter.status !== 'closed') {
+    if (updateData.status === 'closed' && (encounter.status as string) !== 'closed') {
       await triggerSurveyAfterEncounter(req.params.id, doc!);
       // Send patient-friendly summary email notification
       sendEncounterSummaryEmail(doc!).catch(() => undefined);
@@ -610,10 +610,10 @@ router.post(
     };
 
     // Evaluate CDS rules for prescription addition
-    const patientContext = await cdsRulesEngine.getPatientContext(encounter.patientId, req.user!.clinicId);
+    const patientContext = await cdsRulesEngine.getPatientContext(encounter.patientId as any, req.user!.clinicId as any);
     const cdsAlerts = await cdsRulesEngine.evaluateRules('prescription_add', {
-      patientId: encounter.patientId,
-      clinicId: req.user!.clinicId,
+      patientId: encounter.patientId as any,
+      clinicId: req.user!.clinicId as any,
       prescription,
       ...patientContext,
     });

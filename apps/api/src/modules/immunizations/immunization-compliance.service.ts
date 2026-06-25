@@ -99,7 +99,7 @@ export class ImmunizationComplianceService {
           vaccineCode,
           dueDate,
           daysOverdue: Math.max(0, daysOverdue),
-          attendingDoctorId: patient.attendingDoctorId?.toString() || '',
+          attendingDoctorId: (patient as any).attendingDoctorId?.toString() || '',
         });
       }
     }

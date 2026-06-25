@@ -1,4 +1,5 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import { context, propagation } from '@opentelemetry/api';
 import { config } from '@health-watchers/config';
 
 /**
@@ -23,6 +24,7 @@ export interface VerifyTransactionResponse {
   found: boolean;
   transaction?: StellarTransaction;
   error?: string;
+  networkPassphrase?: string;
 }
 
 class StellarClient {
@@ -38,6 +40,14 @@ class StellarClient {
       headers: {
         'Content-Type': 'application/json',
       },
+    });
+
+    // Inject W3C TraceContext headers (traceparent, tracestate) into every outbound request
+    this.client.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
+      const carrier: Record<string, string> = {};
+      propagation.inject(context.active(), carrier);
+      Object.assign(cfg.headers, carrier);
+      return cfg;
     });
   }
 

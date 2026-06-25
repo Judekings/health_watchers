@@ -42,6 +42,8 @@ export interface PaymentRecord {
   // Claimable balance expiry notification flag
   claimableExpiryNotificationSent?: boolean;
   idempotencyKey?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const paymentRecordSchema = new Schema<PaymentRecord>(
@@ -107,4 +109,4 @@ paymentRecordSchema.index(
 );
 
 export const PaymentRecordModel =
-  models.PaymentRecord || model<PaymentRecord>('PaymentRecord', paymentRecordSchema);
+  (models.PaymentRecord || model<PaymentRecord>('PaymentRecord', paymentRecordSchema)) as import("mongoose").Model<PaymentRecord>;

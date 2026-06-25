@@ -59,7 +59,7 @@ export class PatientMergeService {
         
         // Mark duplicate as merged
         duplicate.isDuplicate = true;
-        duplicate.mergedInto = new Types.ObjectId(primaryId);
+        duplicate.mergedInto = new Types.ObjectId(primaryId) as any;
         duplicate.isActive = false;
         
         await primary.save();
@@ -70,9 +70,9 @@ export class PatientMergeService {
           userId,
           clinicId: new Types.ObjectId(clinicId),
           action: 'patient_merge',
-          resource: 'patient',
+          resourceType: 'patient',
           resourceId: primaryId,
-          details: {
+          metadata: {
             primaryPatientId: primaryId,
             duplicatePatientId: duplicateId,
             primaryName: `${primary.firstName} ${primary.lastName}`,

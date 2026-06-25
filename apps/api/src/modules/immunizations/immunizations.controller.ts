@@ -206,6 +206,7 @@ router.get(
       },
       req,
     );
+    return;
   }),
 );
 

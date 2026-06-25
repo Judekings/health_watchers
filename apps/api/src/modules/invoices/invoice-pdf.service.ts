@@ -106,7 +106,7 @@ export async function generateInvoicePDF(opts: InvoicePDFOptions): Promise<PassT
   const logoBuffer = await fetchLogoBuffer(branding);
   if (logoBuffer) {
     try {
-      doc.image(logoBuffer, logoX, logoY, { fit: [120, 60], align: 'left' });
+      doc.image(logoBuffer, logoX, logoY, { fit: [120, 60] });
     } catch {
       // swallow invalid logo image
     }

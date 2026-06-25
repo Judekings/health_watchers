@@ -22,4 +22,4 @@ const clinicKeypairSchema = new Schema<IClinicKeypair>(
   { timestamps: true, versionKey: false },
 );
 
-export const ClinicKeypairModel = models.ClinicKeypair || model<IClinicKeypair>('ClinicKeypair', clinicKeypairSchema);
+export const ClinicKeypairModel = (models.ClinicKeypair || model<IClinicKeypair>('ClinicKeypair', clinicKeypairSchema)) as import("mongoose").Model<IClinicKeypair>;

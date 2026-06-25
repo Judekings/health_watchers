@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppRole } from '@health-watchers/types';
+import { AppRole } from '@api/types/express';
 
 export const Roles = {
   PATIENT: 'PATIENT' as AppRole,

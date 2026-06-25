@@ -186,4 +186,4 @@ immunizationSchema.index({ patientId: 1, vaccineCode: 1 });
 immunizationSchema.index({ clinicId: 1, administeredDate: -1 });
 
 export const ImmunizationModel =
-  models.Immunization || model<IImmunization>('Immunization', immunizationSchema);
+  (models.Immunization || model<IImmunization>('Immunization', immunizationSchema)) as import("mongoose").Model<IImmunization>;

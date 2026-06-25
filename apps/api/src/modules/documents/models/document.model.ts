@@ -36,4 +36,4 @@ const documentSchema = new Schema<PatientDocument>(
 );
 
 export const DocumentModel =
-  models.PatientDocument || model<PatientDocument>('PatientDocument', documentSchema);
+  (models.PatientDocument || model<PatientDocument>('PatientDocument', documentSchema)) as import("mongoose").Model<PatientDocument>;

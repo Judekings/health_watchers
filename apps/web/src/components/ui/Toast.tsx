@@ -10,7 +10,7 @@ interface ToastItem {
   id: string;
   message: string;
   variant: ToastVariant;
-import { useEffect } from 'react';
+}
 
 interface ToastProps {
   message: string;

@@ -53,4 +53,4 @@ const exportRequestSchema = new Schema<ExportRequest>(
 );
 
 export const ExportRequestModel =
-  models.ExportRequest || model<ExportRequest>('ExportRequest', exportRequestSchema);
+  (models.ExportRequest || model<ExportRequest>('ExportRequest', exportRequestSchema)) as import("mongoose").Model<ExportRequest>;

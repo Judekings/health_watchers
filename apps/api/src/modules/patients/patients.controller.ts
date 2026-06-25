@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { PatientModel } from './models/patient.model';
 import { PatientCounterModel } from './models/patient-counter.model';
 import { toPatientResponse } from './patients.transformer';
 import { UserModel } from '../auth/models/user.model';
 import { PortalMessageModel } from '../portal/models/portal-message.model';
 import { portalMessageCreateSchema } from '../portal/portal.validation';
-import { sendMail } from '@api/lib/email.service';
+import { sendMail } from '@api/utils/mailer';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { paginate, parsePagination } from '../../utils/paginate';
 import { emitToClinic, emitToUser } from '@api/realtime/socket';
@@ -96,7 +97,7 @@ router.get(
     const result = await paginate(PatientModel, filter, page, limit);
     return res.json({
       status: 'success',
-      data: result.data.map(toPatientResponse),
+      data: result.data.map((d) => toPatientResponse(d as any)),
       meta: result.meta,
     });
   })
@@ -344,7 +345,7 @@ router.delete(
 // POST /patients/:id/messages — staff reply to patient portal message
 router.post(
   '/:id/messages',
-  requireStaff,
+  requireRoles('DOCTOR', 'NURSE', 'ASSISTANT', 'CLINIC_ADMIN'),
   validateRequest({ body: portalMessageCreateSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const patient = await PatientModel.findOne({
@@ -492,7 +493,7 @@ router.get(
     );
     return res.json({
       status: 'success',
-      data: result.data.map(toEncounterResponse),
+      data: result.data.map((d) => toEncounterResponse(d as any)),
       meta: result.meta,
     });
   })
@@ -763,7 +764,7 @@ router.put(
     });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
-    const allergy = patient.allergies.id(req.params.allergyId);
+    const allergy = (patient.allergies as any).id(req.params.allergyId);
     if (!allergy) return res.status(404).json({ error: 'NotFound', message: 'Allergy not found' });
 
     Object.assign(allergy, req.body);
@@ -795,7 +796,7 @@ router.delete(
     });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
-    const allergy = patient.allergies.id(req.params.allergyId);
+    const allergy = (patient.allergies as any).id(req.params.allergyId);
     if (!allergy) return res.status(404).json({ error: 'NotFound', message: 'Allergy not found' });
 
     allergy.isActive = false;
@@ -963,7 +964,7 @@ router.put(
     });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
-    const ins = patient.insurance?.id(req.params.insuranceId);
+    const ins = (patient.insurance as any)?.id(req.params.insuranceId);
     if (!ins)
       return res.status(404).json({ error: 'NotFound', message: 'Insurance record not found' });
 
@@ -1030,7 +1031,7 @@ router.patch(
     });
     if (!patient) return res.status(404).json({ error: 'NotFound', message: 'Patient not found' });
 
-    const ins = patient.insurance?.id(req.params.insuranceId);
+    const ins = (patient.insurance as any)?.id(req.params.insuranceId);
     if (!ins)
       return res.status(404).json({ error: 'NotFound', message: 'Insurance record not found' });
 
@@ -1117,6 +1118,7 @@ router.delete(
 );
 
 // POST /patients/import — bulk CSV import (CLINIC_ADMIN only)
+// Query: ?dryRun=true validates without writing to DB
 import { parse } from 'csv-parse/sync';
 import { csvUploadMiddleware, handleCsvUploadError } from '@api/middlewares/csv-upload.middleware';
 import { ImportLogModel } from './models/import-log.model';
@@ -1137,6 +1139,7 @@ router.post(
 
     const clinicId = req.user!.clinicId;
     const userId = req.user!.userId;
+    const isDryRun = req.query.dryRun === 'true';
 
     let rows: Record<string, string>[];
     try {
@@ -1151,7 +1154,7 @@ router.post(
         .json({ error: 'ValidationError', message: `Maximum ${MAX_ROWS} rows allowed` });
     }
 
-    const errors: { row: number; field: string; error: string }[] = [];
+    const errors: { row: number; field: string; message: string }[] = [];
     let importedCount = 0;
     let skippedCount = 0;
 
@@ -1170,60 +1173,76 @@ router.post(
 
           // Validate with Zod
           const parsed = createPatientSchema.safeParse({
-            firstName: row.firstName,
-            lastName: row.lastName,
-            dateOfBirth: row.dateOfBirth,
-            sex: row.sex,
-            contactNumber: row.contactNumber || undefined,
-            address: row.address || undefined,
+            firstName: row['firstName'],
+            lastName: row['lastName'],
+            dateOfBirth: row['dateOfBirth'],
+            sex: row['sex'],
+            contactNumber: row['contactNumber'] || undefined,
+            address: row['address'] || undefined,
           });
 
           if (!parsed.success) {
             const issue = parsed.error.issues[0];
-            errors.push({ row: rowNum, field: issue.path[0] as string, error: issue.message });
+            errors.push({
+              row: rowNum,
+              field: issue.path[0] as string,
+              message: issue.message,
+            });
             skippedCount++;
             return;
           }
 
           // Duplicate check: same name + DOB in this clinic
           const searchName = `${parsed.data.firstName} ${parsed.data.lastName}`.toLowerCase();
-          const exists = await PatientModel.exists({
-            clinicId,
-            searchName,
-            dateOfBirth: parsed.data.dateOfBirth,
-          });
-          if (exists) {
-            skippedCount++;
-            return;
-          }
 
-          const systemId = await nextSystemId(String(clinicId));
-          await PatientModel.create({
-            ...parsed.data,
-            systemId,
-            clinicId,
-            searchName,
-            isActive: true,
-          });
+          if (!isDryRun) {
+            const exists = await PatientModel.exists({
+              clinicId,
+              searchName,
+              dateOfBirth: parsed.data.dateOfBirth,
+            });
+            if (exists) {
+              skippedCount++;
+              return;
+            }
+
+            const systemId = await nextSystemId(String(clinicId));
+            await PatientModel.create({
+              ...parsed.data,
+              systemId,
+              clinicId,
+              searchName,
+              isActive: true,
+            });
+          }
           importedCount++;
         })
       );
     }
 
-    await ImportLogModel.create({
-      clinicId,
-      importedBy: userId,
-      totalRows: rows.length,
-      importedCount,
-      skippedCount,
-      errorCount: errors.length,
-      fileName: req.file.originalname,
-      errors,
-    });
+    if (!isDryRun) {
+      await ImportLogModel.create({
+        clinicId,
+        importedBy: userId,
+        totalRows: rows.length,
+        importedCount,
+        skippedCount,
+        errorCount: errors.length,
+        fileName: req.file.originalname,
+        errors: errors.map((e) => ({ row: e.row, field: e.field, error: e.message })),
+      });
+    }
 
     return res.status(200).json({
       status: 'success',
-      data: { total: rows.length, imported: importedCount, skipped: skippedCount, errors },
+      data: {
+        dryRun: isDryRun,
+        total: rows.length,
+        imported: importedCount,
+        failed: errors.length,
+        skipped: skippedCount,
+        errors,
+      },
     });
   })
 );
@@ -1355,11 +1374,16 @@ router.post(
     const message = `Your family member ${patient.firstName} is receiving emergency care at ${clinicName}. Please call ${clinicPhone}.`;
 
     // Log the alert (in production, would send SMS/email)
-    await auditLog(req.user!.id, 'EMERGENCY_ALERT_SENT', {
-      patientId: String(patient._id),
-      contactName: primaryContact.name,
-      contactPhone: primaryContact.phone,
-      message,
+    await auditLog({
+      userId: req.user!.id,
+      clinicId: req.user!.clinicId,
+      action: 'EMERGENCY_ALERT_SENT' as any,
+      metadata: {
+        patientId: String(patient._id),
+        contactName: primaryContact.name,
+        contactPhone: primaryContact.phone,
+        message,
+      },
     });
 
     return res.json({
@@ -1373,8 +1397,6 @@ router.post(
     });
   })
 );
-
-export const patientRoutes = router;
 
 // GET /api/v1/patients/:id/risk-history
 router.get(
@@ -1440,7 +1462,7 @@ router.post(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const { healthScoreService } = await import('./health-score.service');
-    const { aiService } = await import('../ai/ai.service');
+    const aiService = await import('../ai/ai.service') as any;
     const healthScore = await healthScoreService.getHealthScore(req.params.id);
     if (!healthScore)
       return res.status(404).json({ error: 'NotFound', message: 'Health score not found' });

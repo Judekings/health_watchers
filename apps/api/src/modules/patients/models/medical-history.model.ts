@@ -109,4 +109,4 @@ const medicalHistorySchema = new Schema<IMedicalHistory>(
 medicalHistorySchema.index({ clinicId: 1, patientId: 1 });
 
 export const MedicalHistoryModel =
-  mongoose.models.MedicalHistory || mongoose.model<IMedicalHistory>('MedicalHistory', medicalHistorySchema);
+  (mongoose.models.MedicalHistory || mongoose.model<IMedicalHistory>('MedicalHistory', medicalHistorySchema)) as import("mongoose").Model<IMedicalHistory>;

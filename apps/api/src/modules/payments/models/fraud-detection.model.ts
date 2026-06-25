@@ -34,4 +34,4 @@ fraudAlertSchema.index({ clinicId: 1, status: 1 });
 fraudAlertSchema.index({ createdAt: 1 });
 
 export const FraudAlertModel =
-  models.FraudAlert || model<IFraudAlert>('FraudAlert', fraudAlertSchema);
+  (models.FraudAlert || model<IFraudAlert>('FraudAlert', fraudAlertSchema)) as import("mongoose").Model<IFraudAlert>;

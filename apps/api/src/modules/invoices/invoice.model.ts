@@ -61,4 +61,4 @@ InvoiceSchema.index({ patientId: 1, createdAt: -1 });
 InvoiceSchema.index({ status: 1 });
 
 export const InvoiceModel =
-  mongoose.models.Invoice || mongoose.model<IInvoice>('Invoice', InvoiceSchema);
+  (mongoose.models.Invoice || mongoose.model<IInvoice>('Invoice', InvoiceSchema)) as import("mongoose").Model<IInvoice>;

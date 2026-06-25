@@ -196,6 +196,15 @@ export const mongodbKeyDecryptionFailures = new client.Counter({
   registers: [register],
 });
 
+// ── Balance Monitoring Metrics ────────────────────────────────────────────────
+
+export const clinicXlmBalanceGauge = new client.Gauge({
+  name: 'clinic_xlm_balance',
+  help: 'Current XLM balance for each clinic Stellar account',
+  labelNames: ['clinicId'] as const,
+  registers: [register],
+});
+
 // ── Subscription Metrics ──────────────────────────────────────────────────────
 
 export const subscriptionLimitViolations = new client.Counter({

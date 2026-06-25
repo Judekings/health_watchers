@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { config } from '@health-watchers/config';
 import { PaymentRecordModel } from './models/payment-record.model';
 import { PaymentDisputeModel } from './models/payment-dispute.model';
-import { authenticate } from '@api/middlewares/auth.middleware';
+import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import {
   createPaymentIntentSchema,
@@ -1803,7 +1803,7 @@ router.post(
       const { multiSigPaymentService } = await import('./services/multisig-payment.service');
       const { payment, multiSigPayment } = await multiSigPaymentService.createMultiSigPaymentRequest({
         paymentId: undefined as any,
-        clinicId,
+        clinicId: clinicId as any,
         amount,
         currency,
         requiredSignatures,

@@ -69,8 +69,7 @@ export async function generatePatientPDF(options: PDFGenerationOptions): Promise
   doc.fontSize(60);
   doc.text('CONFIDENTIAL - MEDICAL RECORD', 50, 400, {
     align: 'center',
-    angle: 45,
-  });
+  } as any);
   doc.restore();
 
   // Header - Clinic Information
@@ -89,7 +88,7 @@ export async function generatePatientPDF(options: PDFGenerationOptions): Promise
   doc.fontSize(10);
   doc.text(`Patient ID: ${patient.systemId}`);
   doc.text(`Name: ${patient.firstName} ${patient.lastName}`);
-  doc.text(`Date of Birth: ${patient.dateOfBirth.toLocaleDateString()}`);
+  doc.text(`Date of Birth: ${new Date(patient.dateOfBirth).toLocaleDateString()}`);
   doc.text(`Sex: ${patient.sex}`);
   doc.text(`Contact: ${patient.contactNumber || 'N/A'}`);
   doc.text(`Address: ${patient.address || 'N/A'}`);
@@ -100,12 +99,12 @@ export async function generatePatientPDF(options: PDFGenerationOptions): Promise
   doc.moveDown(0.5);
 
   if (encounters.length === 0) {
-    doc.fontSize(10).text('No encounters recorded', { italics: true });
+    doc.fontSize(10).text('No encounters recorded', { italic: true } as any);
   } else {
     encounters.forEach((encounter, index) => {
       if (index > 0) doc.moveDown(1);
 
-      doc.fontSize(12).text(`Encounter ${index + 1} - ${encounter.createdAt.toLocaleDateString()}`, {
+      doc.fontSize(12).text(`Encounter ${index + 1} - ${new Date(encounter.createdAt ?? Date.now()).toLocaleDateString()}`, {
         underline: true,
       });
       doc.fontSize(10);
@@ -156,12 +155,12 @@ export async function generatePatientPDF(options: PDFGenerationOptions): Promise
   doc.moveDown(0.5);
 
   if (payments.length === 0) {
-    doc.fontSize(10).text('No payments recorded', { italics: true });
+    doc.fontSize(10).text('No payments recorded', { italic: true } as any);
   } else {
     doc.fontSize(10);
     payments.slice(0, 20).forEach((payment, index) => {
       doc.text(
-        `${index + 1}. ${payment.createdAt.toLocaleDateString()} - ${payment.amountXlm} XLM - ${payment.status}`
+        `${index + 1}. ${new Date(payment.createdAt ?? Date.now()).toLocaleDateString()} - ${payment.amount} XLM - ${payment.status}`
       );
     });
 
@@ -180,7 +179,7 @@ export async function generatePatientPDF(options: PDFGenerationOptions): Promise
   doc.moveDown(0.5);
 
   if (immunizations.length === 0) {
-    doc.fontSize(10).text('No immunizations recorded', { italics: true });
+    doc.fontSize(10).text('No immunizations recorded', { italic: true } as any);
   } else {
     doc.fontSize(10);
     immunizations.forEach((imm, index) => {

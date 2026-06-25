@@ -24,4 +24,4 @@ icd10Schema.index({ description: 'text' });
 // Prefix search on code
 icd10Schema.index({ code: 1 });
 
-export const ICD10Model = models.ICD10Code || model<IICD10Code>('ICD10Code', icd10Schema);
+export const ICD10Model = (models.ICD10Code || model<IICD10Code>('ICD10Code', icd10Schema)) as import("mongoose").Model<IICD10Code>;

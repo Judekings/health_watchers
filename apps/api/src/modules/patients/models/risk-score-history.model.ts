@@ -29,4 +29,4 @@ const riskScoreHistorySchema = new Schema<IRiskScoreHistory>(
 riskScoreHistorySchema.index({ patientId: 1, calculatedAt: -1 });
 
 export const RiskScoreHistoryModel =
-  models.RiskScoreHistory || model<IRiskScoreHistory>('RiskScoreHistory', riskScoreHistorySchema);
+  (models.RiskScoreHistory || model<IRiskScoreHistory>('RiskScoreHistory', riskScoreHistorySchema)) as import("mongoose").Model<IRiskScoreHistory>;

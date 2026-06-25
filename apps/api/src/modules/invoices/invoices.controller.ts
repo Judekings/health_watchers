@@ -151,6 +151,7 @@ router.get(
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.pdf"`);
     pdfStream.pipe(res);
+    return;
   }),
 );
 
@@ -186,6 +187,7 @@ router.get(
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${invoice.invoiceNumber}.pdf"`);
     pdfStream.pipe(res);
+    return;
   }),
 );
 

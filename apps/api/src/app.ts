@@ -6,7 +6,8 @@ import express from 'express';
 import { createServer } from 'http';
 import helmet from 'helmet';
 import cors from 'cors';
-import compression from 'compression';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const compression = require('compression') as ((...args: any[]) => any) & { filter: (...args: any[]) => boolean };
 import pinoHttp from 'pino-http';
 import mongoSanitize from 'express-mongo-sanitize';
 import mongoose from 'mongoose';
@@ -149,7 +150,7 @@ app.use(
   compression({
     level: 6,
     threshold: 1024, // only compress responses > 1KB
-    filter: (req, res) => {
+    filter: (req: any, res: any) => {
       // Skip already-compressed content types (images, PDFs, etc.)
       const contentType = res.getHeader('Content-Type') as string | undefined;
       if (contentType) {

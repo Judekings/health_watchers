@@ -75,4 +75,4 @@ AppointmentSchema.index({ clinicId: 1, scheduledAt: 1 });
 AppointmentSchema.index({ patientId: 1, scheduledAt: -1 });
 
 export const AppointmentModel =
-  mongoose.models.Appointment || mongoose.model<IAppointment>('Appointment', AppointmentSchema);
+  (mongoose.models.Appointment || mongoose.model<IAppointment>('Appointment', AppointmentSchema)) as import("mongoose").Model<IAppointment>;

@@ -100,7 +100,7 @@ export async function generateImmunizationCertificate(
   doc.moveDown(0.5);
 
   if (immunizations.length === 0) {
-    doc.font('Helvetica').fontSize(10).fillColor('#666').text('No immunizations recorded.', { italics: true });
+    doc.font('Helvetica').fontSize(10).fillColor('#666').text('No immunizations recorded.', { italic: true } as any);
   } else {
     // Table header
     const colX = { date: 50, vaccine: 130, dose: 290, lot: 340, site: 400, admin: 460 };

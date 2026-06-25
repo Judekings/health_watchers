@@ -60,4 +60,4 @@ const labResultSchema = new Schema<ILabResult>(
   { timestamps: true, versionKey: false },
 );
 
-export const LabResultModel = models.LabResult || model<ILabResult>('LabResult', labResultSchema);
+export const LabResultModel = (models.LabResult || model<ILabResult>('LabResult', labResultSchema)) as import("mongoose").Model<ILabResult>;

@@ -33,4 +33,4 @@ const importLogSchema = new Schema<IImportLog>(
   { timestamps: false, versionKey: false }
 );
 
-export const ImportLogModel = models.ImportLog || model<IImportLog>('ImportLog', importLogSchema);
+export const ImportLogModel = (models.ImportLog || model<IImportLog>('ImportLog', importLogSchema)) as import("mongoose").Model<IImportLog>;

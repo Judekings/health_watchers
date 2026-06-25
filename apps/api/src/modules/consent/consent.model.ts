@@ -46,7 +46,7 @@ const consentSchema = new Schema<IConsent>(
 
 consentSchema.index({ patientId: 1, clinicId: 1, type: 1 }, { unique: true });
 
-export const ConsentModel = models.Consent || model<IConsent>('Consent', consentSchema);
+export const ConsentModel = (models.Consent || model<IConsent>('Consent', consentSchema)) as import("mongoose").Model<IConsent>;
 
 // Current consent form versions
 export const CONSENT_TEMPLATES: Record<ConsentType, { version: string; title: string; text: string }> = {

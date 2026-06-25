@@ -1,4 +1,17 @@
 import { Schema, model, models, Types } from 'mongoose';
+import crypto from 'crypto';
+
+export function generateApiKey(): string {
+  return `hw_${crypto.randomBytes(32).toString('hex')}`;
+}
+
+export function hashApiKey(key: string): string {
+  return crypto.createHash('sha256').update(key).digest('hex');
+}
+
+export function getKeyPrefix(key: string): string {
+  return key.slice(0, 12);
+}
 
 export type ApiKeyScope =
   | 'patients:read'
@@ -26,6 +39,9 @@ export interface IApiKey {
   lastUsedAt?: Date;
   expiresAt?: Date;
   createdBy: Types.ObjectId | string;
+  userId?: Types.ObjectId | string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const apiKeySchema = new Schema<IApiKey>(
@@ -43,4 +59,4 @@ const apiKeySchema = new Schema<IApiKey>(
   { timestamps: true, versionKey: false }
 );
 
-export const ApiKeyModel = models.ApiKey || model<IApiKey>('ApiKey', apiKeySchema);
+export const ApiKeyModel = (models.ApiKey || model<IApiKey>('ApiKey', apiKeySchema)) as import("mongoose").Model<IApiKey>;

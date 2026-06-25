@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { EncounterModel } from './encounter.model';
-import { PatientModel } from '../patients/patient.model';
+import { PatientModel } from '../patients/models/patient.model';
 import { UserModel } from '../auth/models/user.model';
 
 export async function getBillingSummary(req: Request, res: Response): Promise<void> {

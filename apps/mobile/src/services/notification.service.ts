@@ -35,7 +35,7 @@ export class NotificationService {
 
   static useNotificationListener() {
     useEffect(() => {
-      const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const subscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
         const { appointmentId, encounterId, labResultId } = response.notification.request.content.data;
         // Handle navigation based on notification type
         if (appointmentId) {

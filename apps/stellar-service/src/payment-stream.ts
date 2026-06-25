@@ -123,12 +123,3 @@ export function registerPaymentConfirmationListener(
 ): void {
   paymentStreamEvents.on('payment:confirmed', onConfirmed);
 }
-        }
-      },
-      onerror: (err: any) => {
-        logger.error({ err }, 'Payment stream error');
-      },
-    });
-
-  return close as () => void;
-}

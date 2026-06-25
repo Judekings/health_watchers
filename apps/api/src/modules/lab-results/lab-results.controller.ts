@@ -6,7 +6,7 @@ import { detectCriticalValues } from './critical-value.service';
 import { createNotification } from '../notifications/notification.service';
 import { emitToUser } from '@api/realtime/socket';
 import { AuditLogModel } from '../audit/audit-log.model';
-import { sendEmail } from '@api/lib/email.service';
+import { sendMail } from '@api/utils/mailer';
 import { UserModel } from '../auth/models/user.model';
 
 const router = Router();
@@ -118,8 +118,8 @@ router.put(
       if (doctor) {
         // Create in-app notification
         await createNotification({
-          userId: doc.orderedBy,
-          clinicId: doc.clinicId,
+          userId: doc.orderedBy as any,
+          clinicId: doc.clinicId as any,
           type: 'lab_result_ready',
           title: 'Critical Lab Result',
           message: `Critical value detected: ${criticalReason}`,
@@ -139,7 +139,7 @@ router.put(
 
         // Send email alert
         if (doctor.email) {
-          await sendEmail({
+          await sendMail({
             to: doctor.email,
             subject: `URGENT: Critical Lab Result - ${doc.testName}`,
             html: `<p>A critical lab value has been detected:</p><p><strong>${criticalReason}</strong></p><p>Please review immediately.</p>`,

@@ -21,4 +21,4 @@ const apiKeyUsageSchema = new Schema<IApiKeyUsage>(
 
 apiKeyUsageSchema.index({ apiKeyId: 1, date: 1 }, { unique: true });
 
-export const ApiKeyUsageModel = models.ApiKeyUsage || model<IApiKeyUsage>('ApiKeyUsage', apiKeyUsageSchema);
+export const ApiKeyUsageModel = (models.ApiKeyUsage || model<IApiKeyUsage>('ApiKeyUsage', apiKeyUsageSchema)) as import("mongoose").Model<IApiKeyUsage>;

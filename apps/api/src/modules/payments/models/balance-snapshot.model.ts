@@ -22,4 +22,4 @@ const balanceSnapshotSchema = new Schema<IBalanceSnapshot>(
 balanceSnapshotSchema.index({ clinicId: 1, date: -1 }, { unique: true });
 
 export const BalanceSnapshotModel =
-  models.BalanceSnapshot || model<IBalanceSnapshot>('BalanceSnapshot', balanceSnapshotSchema);
+  (models.BalanceSnapshot || model<IBalanceSnapshot>('BalanceSnapshot', balanceSnapshotSchema)) as import("mongoose").Model<IBalanceSnapshot>;

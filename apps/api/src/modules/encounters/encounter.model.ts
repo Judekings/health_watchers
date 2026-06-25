@@ -87,6 +87,14 @@ export interface Encounter {
   isActive?: boolean;
   billing?: BillingInfo;
   attachments?: Attachment[];
+  requiresCoSignature?: boolean;
+  coSignatureStatus?: 'pending' | 'approved' | 'rejected';
+  coSignedBy?: Schema.Types.ObjectId;
+  coSignedAt?: Date;
+  coSignatureNotes?: string;
+  closedAt?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const vitalSignsSchema = new Schema<VitalSigns>(
@@ -264,4 +272,4 @@ encounterSchema.pre('findOneAndUpdate', function () {
   }
 });
 
-export const EncounterModel = models.Encounter || model<Encounter>('Encounter', encounterSchema);
+export const EncounterModel = (models.Encounter || model<Encounter>('Encounter', encounterSchema)) as import("mongoose").Model<Encounter>;

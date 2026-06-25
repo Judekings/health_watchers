@@ -45,4 +45,4 @@ const breachIncidentSchema = new Schema<BreachIncident>(
 breachIncidentSchema.index({ notificationDeadline: 1, notificationStatus: 1 });
 
 export const BreachIncidentModel =
-  models.BreachIncident || model<BreachIncident>('BreachIncident', breachIncidentSchema);
+  (models.BreachIncident || model<BreachIncident>('BreachIncident', breachIncidentSchema)) as import("mongoose").Model<BreachIncident>;

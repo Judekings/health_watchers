@@ -35,7 +35,6 @@ function statusBadgeVariant(status: string) {
   if (status === 'failed') return 'danger';
   return 'default';
 }
-}
 
 /** Animated dot indicator for real-time status feedback */
 function StatusIndicator({ status }: { status: string }) {

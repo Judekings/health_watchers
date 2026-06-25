@@ -69,9 +69,9 @@ export class CoSignatureController {
         userId,
         clinicId,
         action: 'cosign_approve',
-        resource: 'encounter',
+        resourceType: 'encounter',
         resourceId: id,
-        details: {
+        metadata: {
           encounterId: id,
           notes,
         },
@@ -131,9 +131,9 @@ export class CoSignatureController {
         userId,
         clinicId,
         action: 'cosign_reject',
-        resource: 'encounter',
+        resourceType: 'encounter',
         resourceId: id,
-        details: {
+        metadata: {
           encounterId: id,
           notes,
         },

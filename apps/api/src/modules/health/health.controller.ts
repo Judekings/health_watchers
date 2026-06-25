@@ -37,7 +37,7 @@ router.get('/ready', async (req: Request, res: Response) => {
     if (mongoStatus === 1) {
       // Perform a simple ping if connected
       await mongoose.connection.db?.admin().ping();
-      const pool = mongoose.connection.pool;
+      const pool = (mongoose.connection as any).pool;
       const totalConnections = pool?.totalConnectionCount ?? 0;
       const waitQueueSize = pool?.waitQueueSize ?? 0;
       const maxPoolSize = parseInt(process.env.MONGODB_POOL_SIZE ?? '10', 10);

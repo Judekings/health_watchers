@@ -26,7 +26,6 @@ export type CreateEncounterData = z.infer<typeof schema> & {
   soapNotes?: { subjective?: string; objective?: string; assessment?: string; plan?: string };
   diagnosis?: DiagnosisEntry[];
 };
-};
 
 interface Props {
   onSubmit: (data: CreateEncounterData) => Promise<void>;

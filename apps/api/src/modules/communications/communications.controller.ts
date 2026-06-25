@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { authenticate } from '../../middleware/authenticate';
-import { requireRoles } from '../../middleware/requireRoles';
-import { validate } from '../../middleware/validate';
+import { authenticate } from '@api/middlewares/auth.middleware';
+import { requireRoles } from '@api/middlewares/auth.middleware';
+import { validateRequest as validate } from '@api/middlewares/validate.middleware';
 import { communicationService } from './communication.service';
 import { logCommunicationSchema, listCommunicationsSchema } from './communication.validation';
 
@@ -12,7 +12,7 @@ router.post(
   '/',
   authenticate,
   requireRoles('DOCTOR', 'NURSE', 'CLINIC_ADMIN'),
-  validate(logCommunicationSchema),
+  validate({ body: logCommunicationSchema }),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id: patientId } = req.params;
@@ -35,7 +35,7 @@ router.get(
   '/',
   authenticate,
   requireRoles('DOCTOR', 'NURSE', 'CLINIC_ADMIN'),
-  validate(listCommunicationsSchema, 'query'),
+  validate({ query: listCommunicationsSchema }),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id: patientId } = req.params;

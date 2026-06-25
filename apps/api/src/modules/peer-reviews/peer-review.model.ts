@@ -44,4 +44,4 @@ peerReviewSchema.index({ revieweeId: 1, clinicId: 1 });
 // One review per encounter
 peerReviewSchema.index({ encounterId: 1 }, { unique: true });
 
-export const PeerReviewModel = models.PeerReview || model<IPeerReview>('PeerReview', peerReviewSchema);
+export const PeerReviewModel = (models.PeerReview || model<IPeerReview>('PeerReview', peerReviewSchema)) as import("mongoose").Model<IPeerReview>;

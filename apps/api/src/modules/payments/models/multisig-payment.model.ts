@@ -43,4 +43,4 @@ multiSigPaymentSchema.index({ clinicId: 1, status: 1 });
 multiSigPaymentSchema.index({ signers: 1, status: 1 });
 
 export const MultiSigPaymentModel =
-  models.MultiSigPayment || model<IMultiSigPayment>('MultiSigPayment', multiSigPaymentSchema);
+  (models.MultiSigPayment || model<IMultiSigPayment>('MultiSigPayment', multiSigPaymentSchema)) as import("mongoose").Model<IMultiSigPayment>;

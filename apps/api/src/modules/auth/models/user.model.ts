@@ -60,6 +60,8 @@ export interface User {
   portalMfaMethod?: 'totp' | 'sms'; // MFA method preference
   portalPhoneNumber?: string; // For SMS OTP
   portalMfaEnabledAt?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const userSchema = new Schema(
@@ -180,4 +182,4 @@ userSchema.pre('save', async function () {
 userSchema.index({ clinicId: 1, role: 1 });     // List users by clinic and role
 userSchema.index({ clinicId: 1, isActive: 1 }); // Active users per clinic
 
-export const UserModel = models.User || model('User', userSchema);
+export const UserModel = (models.User || model<User>('User', userSchema)) as import("mongoose").Model<User>;

@@ -6,7 +6,7 @@ import { validateRequest } from '@api/middlewares/validate.middleware';
 import { UserModel } from '../auth/models/user.model';
 import { RefreshTokenModel } from '../auth/models/refresh-token.model';
 import { asyncHandler } from '@api/middlewares/async.handler';
-import { sendEmail } from '@api/lib/email.service';
+import { sendMail } from '@api/utils/mailer';
 import logger from '@api/utils/logger';
 import { AppRole } from '@api/types/express';
 
@@ -15,10 +15,12 @@ const router = Router();
 // Role hierarchy for validation
 const ROLE_HIERARCHY: Record<AppRole, number> = {
   'READ_ONLY': 1,
+  'PATIENT': 1,
   'ASSISTANT': 2,
   'NURSE': 3,
   'DOCTOR': 4,
   'CLINIC_ADMIN': 5,
+  'ADMIN': 5,
   'SUPER_ADMIN': 6,
 };
 
@@ -104,7 +106,7 @@ router.post(
 
     // Send welcome email with temporary password
     try {
-      await sendEmail({
+      await sendMail({
         to: email,
         subject: 'Welcome to Health Watchers - Account Created',
         text: `Hello ${fullName},\n\nYour Health Watchers account has been created.\n\nEmail: ${email}\nTemporary Password: ${temporaryPassword}\n\nPlease log in and change your password immediately.\n\nBest regards,\nHealth Watchers Team`,
@@ -271,7 +273,7 @@ router.put(
       }
 
       // Cannot escalate a user to a role higher than your own
-      if (ROLE_HIERARCHY[role] > ROLE_HIERARCHY[requestingUser.role]) {
+      if (ROLE_HIERARCHY[role as AppRole] > ROLE_HIERARCHY[requestingUser.role as AppRole]) {
         return res.status(403).json({
           error: 'Forbidden',
           message: 'Cannot assign a role higher than your own',
@@ -408,7 +410,7 @@ router.post(
 
     // Send password reset email
     try {
-      await sendEmail({
+      await sendMail({
         to: user.email,
         subject: 'Health Watchers - Password Reset by Administrator',
         text: `Hello ${user.fullName},\n\nYour password has been reset by an administrator.\n\nTemporary Password: ${temporaryPassword}\n\nPlease log in and change your password immediately.\n\nBest regards,\nHealth Watchers Team`,

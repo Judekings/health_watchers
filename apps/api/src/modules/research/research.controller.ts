@@ -33,7 +33,7 @@ export class ResearchController {
         dateOfBirth: p.dateOfBirth,
         contactNumber: p.contactNumber,
         address: p.address,
-        email: p.email,
+        email: (p as any).email,
         systemId: p.systemId,
         sex: p.sex,
       }));
@@ -72,9 +72,9 @@ export class ResearchController {
         userId: req.user?.userId,
         clinicId: req.user?.clinicId,
         action: 'research_export',
-        resource: 'research',
+        resourceType: 'research',
         resourceId: 'export',
-        details: {
+        metadata: {
           recordCount: patients.length,
           anonymizationLevel: 'aggregation',
           irbApproval: true,

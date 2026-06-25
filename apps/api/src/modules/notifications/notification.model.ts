@@ -15,6 +15,7 @@ export const NOTIFICATION_TYPES = [
   'unrecognized_transaction',
   'waitlist_available',
   'claimable_expiring',
+  'subscription_warning',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -55,4 +56,4 @@ notificationSchema.index({ userId: 1, createdAt: -1 });
 notificationSchema.index({ userId: 1, isRead: 1 });
 
 export const NotificationModel =
-  models.Notification || model<INotification>('Notification', notificationSchema);
+  (models.Notification || model<INotification>('Notification', notificationSchema)) as import("mongoose").Model<INotification>;

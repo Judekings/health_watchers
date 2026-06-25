@@ -19,7 +19,7 @@ const grantConsentSchema = z.object({
 
 // GET /consent/templates
 router.get('/templates', (_req, res) => {
-  res.json({ status: 'success', data: CONSENT_TEMPLATES });
+  return res.json({ status: 'success', data: CONSENT_TEMPLATES });
 });
 
 // POST /patients/:id/consent
@@ -73,7 +73,7 @@ router.post(
       req
     );
 
-    res.status(201).json({ status: 'success', data: consent });
+    return res.status(201).json({ status: 'success', data: consent });
   }
 );
 
@@ -106,7 +106,7 @@ router.post('/consent/:id/verify', async (req: Request, res: Response) => {
     req
   );
 
-  res.json({ status: 'success', data: { isValid } });
+  return res.json({ status: 'success', data: { isValid } });
 });
 
 // GET /patients/:id/consent
@@ -115,7 +115,7 @@ router.get('/patients/:id/consent', async (req: Request, res: Response) => {
   const clinicId = req.user!.clinicId;
 
   const consents = await ConsentModel.find({ patientId, clinicId }).lean();
-  res.json({ status: 'success', data: consents });
+  return res.json({ status: 'success', data: consents });
 });
 
 // DELETE /patients/:id/consent/:type — withdraw consent
@@ -148,7 +148,7 @@ router.delete(
       req
     );
 
-    res.json({ status: 'success', data: consent });
+    return res.json({ status: 'success', data: consent });
   }
 );
 

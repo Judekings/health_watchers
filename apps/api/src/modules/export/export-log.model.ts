@@ -23,4 +23,4 @@ const exportLogSchema = new Schema<ExportLog>(
   { timestamps: true, versionKey: false }
 );
 
-export const ExportLogModel = models.ExportLog || model<ExportLog>('ExportLog', exportLogSchema);
+export const ExportLogModel = (models.ExportLog || model<ExportLog>('ExportLog', exportLogSchema)) as import("mongoose").Model<ExportLog>;

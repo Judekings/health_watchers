@@ -45,4 +45,4 @@ documentVersionSchema.index({ documentId: 1, version: -1 });
 documentVersionSchema.index({ patientId: 1, clinicId: 1, isCurrentVersion: 1 });
 
 export const DocumentVersionModel =
-  models.DocumentVersion || model<DocumentVersion>('DocumentVersion', documentVersionSchema);
+  (models.DocumentVersion || model<DocumentVersion>('DocumentVersion', documentVersionSchema)) as import("mongoose").Model<DocumentVersion>;

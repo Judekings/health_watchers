@@ -1,6 +1,6 @@
 import { RecurringPayment } from './recurring-payment.model';
 import { CreateRecurringPaymentInput, UpdateRecurringPaymentInput } from './recurring-payment.validation';
-import { sendEmail } from '@api/lib/email.service';
+import { sendMail } from '@api/utils/mailer';
 
 function getNextPaymentDate(startDate: Date, frequency: string): Date {
   const next = new Date(startDate);
@@ -115,7 +115,7 @@ export async function notifyPatientOfPayment(
   currency: string,
   approveUrl: string
 ) {
-  await sendEmail({
+  await sendMail({
     to: patientEmail,
     subject: 'Payment Request - Action Required',
     html: `

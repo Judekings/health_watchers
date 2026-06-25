@@ -122,7 +122,6 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
         data.maxSourceAmount = maxSourceAmount;
         data.path = chosen.path;
       }
-      }
       await onSubmit({ ...data, feeStrategy });
     } catch (err) {
       setError('root', {
@@ -144,6 +143,7 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
   };
 
   return (
+    <>
     <form onSubmit={handleSubmit(submit)} className="space-y-5">
       {errors.root && (
         <p role="alert" className="bg-danger-50 text-danger-500 rounded-md px-3 py-2 text-sm">
@@ -326,5 +326,6 @@ export function PaymentIntentForm({ onSubmit, onCancel }: Props) {
         </div>
       </div>
     </Modal>
+    </>
   );
 }

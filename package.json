@@ -12,6 +12,7 @@
     "turbo": "latest"
   },
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   }
 }

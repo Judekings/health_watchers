@@ -74,7 +74,7 @@ insuranceClaimSchema.index({ status: 1, clinicId: 1 });
 insuranceClaimSchema.index({ claimHash: 1, clinicId: 1 });
 
 export const InsuranceClaimModel =
-  models.InsuranceClaim || model<InsuranceClaim>('InsuranceClaim', insuranceClaimSchema);
+  (models.InsuranceClaim || model<InsuranceClaim>('InsuranceClaim', insuranceClaimSchema)) as import("mongoose").Model<InsuranceClaim>;
 
 /**
  * Calculate SHA-256 hash of claim data for blockchain verification

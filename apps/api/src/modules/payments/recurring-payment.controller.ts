@@ -21,8 +21,8 @@ const router = Router();
 router.post(
   '/',
   authenticate,
-  requireRoles(['CLINIC_ADMIN']),
-  validateRequest(createRecurringPaymentSchema),
+  requireRoles('CLINIC_ADMIN'),
+  validateRequest({ body: createRecurringPaymentSchema }),
   async (req: Request, res: Response) => {
     try {
       const payment = await createRecurringPayment(req.user!.clinicId, req.body);
@@ -50,7 +50,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 });
 
 // PUT /api/v1/payments/recurring/:id/pause
-router.put('/:id/pause', authenticate, requireRoles(['CLINIC_ADMIN']), async (req: Request, res: Response) => {
+router.put('/:id/pause', authenticate, requireRoles('CLINIC_ADMIN'), async (req: Request, res: Response) => {
   try {
     const payment = await pauseRecurringPayment(req.params.id);
     return res.json({ success: true, data: payment });
@@ -61,7 +61,7 @@ router.put('/:id/pause', authenticate, requireRoles(['CLINIC_ADMIN']), async (re
 });
 
 // PUT /api/v1/payments/recurring/:id/resume
-router.put('/:id/resume', authenticate, requireRoles(['CLINIC_ADMIN']), async (req: Request, res: Response) => {
+router.put('/:id/resume', authenticate, requireRoles('CLINIC_ADMIN'), async (req: Request, res: Response) => {
   try {
     const payment = await resumeRecurringPayment(req.params.id);
     return res.json({ success: true, data: payment });
@@ -72,7 +72,7 @@ router.put('/:id/resume', authenticate, requireRoles(['CLINIC_ADMIN']), async (r
 });
 
 // DELETE /api/v1/payments/recurring/:id
-router.delete('/:id', authenticate, requireRoles(['CLINIC_ADMIN']), async (req: Request, res: Response) => {
+router.delete('/:id', authenticate, requireRoles('CLINIC_ADMIN'), async (req: Request, res: Response) => {
   try {
     const payment = await cancelRecurringPayment(req.params.id);
     return res.json({ success: true, data: payment });
@@ -86,8 +86,8 @@ router.delete('/:id', authenticate, requireRoles(['CLINIC_ADMIN']), async (req: 
 router.put(
   '/:id',
   authenticate,
-  requireRoles(['CLINIC_ADMIN']),
-  validateRequest(updateRecurringPaymentSchema),
+  requireRoles('CLINIC_ADMIN'),
+  validateRequest({ body: updateRecurringPaymentSchema }),
   async (req: Request, res: Response) => {
     try {
       const payment = await updateRecurringPayment(req.params.id, req.body);

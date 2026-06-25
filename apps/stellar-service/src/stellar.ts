@@ -1,16 +1,19 @@
-import { 
-  Keypair, 
-  Horizon, 
-  TransactionBuilder, 
-  BASE_FEE, 
-  Networks, 
-  Operation, 
-  Asset 
+import {
+  Keypair,
+  Horizon,
+  TransactionBuilder,
+  BASE_FEE,
+  Networks,
+  Operation,
+  Asset
 } from '@stellar/stellar-sdk';
+import { trace, SpanStatusCode, context, propagation } from '@opentelemetry/api';
 import { stellarConfig } from './config.js';
 import { assertTransactionLimit } from './guards.js';
 import logger from './logger.js';
 import ResilientHorizonClient from './horizon-client.js';
+
+const tracer = trace.getTracer('stellar-service', '1.0.0');
 
 // Initialize resilient Horizon client
 const horizonClient = new ResilientHorizonClient(stellarConfig.horizonUrls);
@@ -80,42 +83,52 @@ export async function fundAccount(publicKey: string, amount?: number) {
  * Get account balance and recent transactions
  */
 export async function getAccountBalance(publicKey: string) {
-  const server = getHorizonServer();
-  try {
-    const start = Date.now();
-    logger.info({ operation: 'getAccountBalance', publicKey }, 'Loading account from Horizon');
-    const account = await server.loadAccount(publicKey);
-    const xlmBalance = account.balances.find((b: any) => b.asset_type === 'native');
-    const usdcBalance = account.balances.find(
-      (b: any) => b.asset_code === 'USDC' && b.asset_type !== 'native'
-    );
+  return tracer.startActiveSpan('stellar.getAccountBalance', async (span) => {
+    span.setAttribute('stellar.public_key', publicKey);
+    const server = getHorizonServer();
+    try {
+      const start = Date.now();
+      logger.info({ operation: 'getAccountBalance', publicKey }, 'Loading account from Horizon');
+      const account = await server.loadAccount(publicKey);
+      const xlmBalance = account.balances.find((b: any) => b.asset_type === 'native');
+      const usdcBalance = account.balances.find(
+        (b: any) => b.asset_code === 'USDC' && b.asset_type !== 'native'
+      );
 
-    const payments = await server.payments().forAccount(publicKey).limit(10).order('desc').call();
-    const transactions = payments.records
-      .filter((r: any) => r.type === 'payment' || r.type === 'create_account')
-      .map((r: any) => ({
-        id: r.id,
-        type: r.type,
-        amount: r.amount ?? r.starting_balance ?? '0',
-        asset: r.asset_type === 'native' ? 'XLM' : `${r.asset_code}:${r.asset_issuer}`,
-        from: r.from ?? r.funder,
-        to: r.to ?? r.account,
-        hash: r.transaction_hash,
-        createdAt: r.created_at,
-      }));
+      const payments = await server.payments().forAccount(publicKey).limit(10).order('desc').call();
+      const transactions = payments.records
+        .filter((r: any) => r.type === 'payment' || r.type === 'create_account')
+        .map((r: any) => ({
+          id: r.id,
+          type: r.type,
+          amount: r.amount ?? r.starting_balance ?? '0',
+          asset: r.asset_type === 'native' ? 'XLM' : `${r.asset_code}:${r.asset_issuer}`,
+          from: r.from ?? r.funder,
+          to: r.to ?? r.account,
+          hash: r.transaction_hash,
+          createdAt: r.created_at,
+        }));
 
-    const durationMs = Date.now() - start;
-    logger.info({ operation: 'getAccountBalance', publicKey, durationMs }, 'Fetched account balance and recent transactions');
-    return {
-      balance: xlmBalance ? xlmBalance.balance : '0',
-      usdcBalance: usdcBalance ? usdcBalance.balance : null,
-      transactions,
-      durationMs,
-    };
-  } catch (error: any) {
-    logger.error({ operation: 'getAccountBalance', error: { message: error.message, stack: error.stack }, publicKey }, 'Failed to get account balance');
-    throw error;
-  }
+      const durationMs = Date.now() - start;
+      span.setAttribute('stellar.xlm_balance', xlmBalance?.balance ?? '0');
+      span.setAttribute('stellar.tx_count', transactions.length);
+      span.setStatus({ code: SpanStatusCode.OK });
+      logger.info({ operation: 'getAccountBalance', publicKey, durationMs }, 'Fetched account balance and recent transactions');
+      return {
+        balance: xlmBalance ? xlmBalance.balance : '0',
+        usdcBalance: usdcBalance ? usdcBalance.balance : null,
+        transactions,
+        durationMs,
+      };
+    } catch (error: any) {
+      span.recordException(error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      logger.error({ operation: 'getAccountBalance', error: { message: error.message, stack: error.stack }, publicKey }, 'Failed to get account balance');
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
 }
 
 /**
@@ -169,81 +182,105 @@ export async function createIntent(
   toPublicKey: string,
   amount: string
 ) {
-  const amountNum = parseFloat(amount);
-  assertTransactionLimit(amountNum);
-  const start = Date.now();
-  logger.info({ operation: 'createIntent', from: fromPublicKey, to: toPublicKey, amount }, 'Creating payment intent');
+  return tracer.startActiveSpan('stellar.createIntent', async (span) => {
+    span.setAttribute('stellar.from', fromPublicKey);
+    span.setAttribute('stellar.to', toPublicKey);
+    span.setAttribute('stellar.amount', amount);
 
-  const server = getHorizonServer();
-  const sourceKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const amountNum = parseFloat(amount);
+    assertTransactionLimit(amountNum);
+    const start = Date.now();
+    logger.info({ operation: 'createIntent', from: fromPublicKey, to: toPublicKey, amount }, 'Creating payment intent');
 
-  try {
-    const account = await server.loadAccount(fromPublicKey);
-    
-    const transaction = new TransactionBuilder(account, {
-      fee: BASE_FEE,
-      networkPassphrase: getNetworkPassphrase(),
-    })
-      .addOperation(
-        Operation.payment({
-          destination: toPublicKey,
-          asset: Asset.native(),
-          amount: amount,
-        })
-      )
-      .setTimeout(300)
-      .build();
+    const server = getHorizonServer();
+    const sourceKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
 
-    transaction.sign(sourceKeypair);
+    try {
+      const account = await server.loadAccount(fromPublicKey);
 
-    const xdr = transaction.toXDR();
-    const hash = transaction.hash().toString('hex');
-    const durationMs = Date.now() - start;
+      const transaction = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: getNetworkPassphrase(),
+      })
+        .addOperation(
+          Operation.payment({
+            destination: toPublicKey,
+            asset: Asset.native(),
+            amount: amount,
+          })
+        )
+        .setTimeout(300)
+        .build();
 
-    logger.info({ operation: 'createIntent', hash, durationMs }, 'Payment intent created');
+      transaction.sign(sourceKeypair);
 
-    return {
-      xdr,
-      hash,
-      networkPassphrase: getNetworkPassphrase(),
-      envelope: transaction.toEnvelope().toXDR('base64'),
-      durationMs,
-    };
-  } catch (error) {
-    logger.error({ operation: 'createIntent', error: { message: (error as Error).message, stack: (error as any).stack }, from: fromPublicKey, to: toPublicKey }, 'Failed to create intent');
-    throw error;
-  }
+      const xdr = transaction.toXDR();
+      const hash = transaction.hash().toString('hex');
+      const durationMs = Date.now() - start;
+
+      span.setAttribute('stellar.tx_hash', hash);
+      span.setStatus({ code: SpanStatusCode.OK });
+      logger.info({ operation: 'createIntent', hash, durationMs }, 'Payment intent created');
+
+      return {
+        xdr,
+        hash,
+        networkPassphrase: getNetworkPassphrase(),
+        envelope: transaction.toEnvelope().toXDR('base64'),
+        durationMs,
+      };
+    } catch (error) {
+      span.recordException(error as Error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+      logger.error({ operation: 'createIntent', error: { message: (error as Error).message, stack: (error as any).stack }, from: fromPublicKey, to: toPublicKey }, 'Failed to create intent');
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
 }
 
 /**
  * Verify a transaction by hash
  */
 export async function verifyIntent(hash: string) {
-  const start = Date.now();
-  logger.info({ operation: 'verifyIntent', hash }, 'Verifying transaction');
+  return tracer.startActiveSpan('stellar.verifyIntent', async (span) => {
+    span.setAttribute('stellar.tx_hash', hash);
+    const start = Date.now();
+    logger.info({ operation: 'verifyIntent', hash }, 'Verifying transaction');
 
-  const server = getHorizonServer();
+    const server = getHorizonServer();
 
-  try {
-    const transaction = await server.transactions().transaction(hash).call();
-    const durationMs = Date.now() - start;
-    logger.info({ operation: 'verifyIntent', hash, successful: transaction.successful, durationMs }, 'Transaction verified');
+    try {
+      const transaction = await server.transactions().transaction(hash).call();
+      const durationMs = Date.now() - start;
+      span.setAttribute('stellar.tx_successful', transaction.successful);
+      span.setStatus({ code: SpanStatusCode.OK });
+      logger.info({ operation: 'verifyIntent', hash, successful: transaction.successful, durationMs }, 'Transaction verified');
 
-    return {
-      found: true,
-      hash: transaction.hash,
-      successful: transaction.successful,
-      ledger: transaction.ledger_attr,
-      createdAt: transaction.created_at,
-      durationMs,
-    };
-  } catch (error: any) {
-    logger.error({ operation: 'verifyIntent', error: { message: error.message, stack: error.stack }, hash }, 'Failed to verify transaction');
-    if (error.response?.status === 404) {
-      return { found: false, error: 'Transaction not found' };
+      return {
+        found: true,
+        hash: transaction.hash,
+        successful: transaction.successful,
+        ledger: transaction.ledger_attr,
+        createdAt: transaction.created_at,
+        durationMs,
+      };
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        span.setStatus({ code: SpanStatusCode.OK });
+        span.end();
+        logger.error({ operation: 'verifyIntent', error: { message: error.message, stack: error.stack }, hash }, 'Failed to verify transaction');
+        return { found: false, error: 'Transaction not found' };
+      }
+      span.recordException(error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+      logger.error({ operation: 'verifyIntent', error: { message: error.message, stack: error.stack }, hash }, 'Failed to verify transaction');
+      throw error;
+    } finally {
+      span.end();
     }
-    throw error;
-  }
+  });
 }
 
 /**
@@ -328,39 +365,57 @@ const STROOPS_PER_XLM = 10_000_000;
  * Issue a refund by sending XLM from the platform account to a destination
  */
 export async function issueRefund(toPublicKey: string, amount: string, memo: string) {
-  assertTransactionLimit(parseFloat(amount));
+  return tracer.startActiveSpan('stellar.issueRefund', async (span) => {
+    span.setAttribute('stellar.to', toPublicKey);
+    span.setAttribute('stellar.amount', amount);
 
-  const server = getHorizonServer();
-  const sourceKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
-  const account = await server.loadAccount(sourceKeypair.publicKey());
-  const fee = await server.fetchBaseFee();
+    assertTransactionLimit(parseFloat(amount));
 
-  const transaction = new TransactionBuilder(account, {
-    fee: String(fee),
-    networkPassphrase: getNetworkPassphrase(),
-  })
-    .addOperation(
-      Operation.payment({
-        destination: toPublicKey,
-        asset: Asset.native(),
-        amount,
-      })
-    )
-    .addMemo({ type: 'text', value: memo.slice(0, 28) } as any)
-    .setTimeout(300)
-    .build();
+    const server = getHorizonServer();
+    const sourceKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+    const account = await server.loadAccount(sourceKeypair.publicKey());
+    const fee = await server.fetchBaseFee();
 
-  transaction.sign(sourceKeypair);
+    const transaction = new TransactionBuilder(account, {
+      fee: String(fee),
+      networkPassphrase: getNetworkPassphrase(),
+    })
+      .addOperation(
+        Operation.payment({
+          destination: toPublicKey,
+          asset: Asset.native(),
+          amount,
+        })
+      )
+      .addMemo({ type: 'text', value: memo.slice(0, 28) } as any)
+      .setTimeout(300)
+      .build();
 
-  if (stellarConfig.dryRun) {
-    return { transactionHash: 'dry-run-' + transaction.hash().toString('hex'), dryRun: true };
-  }
+    transaction.sign(sourceKeypair);
 
-  const start = Date.now();
-  const result = await server.submitTransaction(transaction);
-  const durationMs = Date.now() - start;
-  logger.info({ operation: 'issueRefund', hash: result.hash, to: toPublicKey, amount, durationMs }, 'Refund issued');
-  return { transactionHash: result.hash, durationMs };
+    if (stellarConfig.dryRun) {
+      span.setAttribute('stellar.dry_run', true);
+      span.setStatus({ code: SpanStatusCode.OK });
+      span.end();
+      return { transactionHash: 'dry-run-' + transaction.hash().toString('hex'), dryRun: true };
+    }
+
+    try {
+      const start = Date.now();
+      const result = await server.submitTransaction(transaction);
+      const durationMs = Date.now() - start;
+      span.setAttribute('stellar.tx_hash', result.hash);
+      span.setStatus({ code: SpanStatusCode.OK });
+      logger.info({ operation: 'issueRefund', hash: result.hash, to: toPublicKey, amount, durationMs }, 'Refund issued');
+      return { transactionHash: result.hash, durationMs };
+    } catch (error) {
+      span.recordException(error as Error);
+      span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
 }
 
 function stroopsToXlm(stroops: string): string {

@@ -122,8 +122,8 @@ appointmentRoutes.post(
       await emitAppointmentStatusChange(
         req.params.id,
         'patient_arrived',
-        updated,
-        { checkedInAt: updated.checkedInAt }
+        updated!,
+        { checkedInAt: updated?.checkedInAt }
       );
 
       // Create notification for staff

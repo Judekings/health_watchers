@@ -62,4 +62,4 @@ communicationLogSchema.index({ clinicId: 1 });
 communicationLogSchema.index({ patientId: 1, channel: 1 });
 
 export const CommunicationLogModel =
-  models.CommunicationLog || model<ICommunicationLog>('CommunicationLog', communicationLogSchema);
+  (models.CommunicationLog || model<ICommunicationLog>('CommunicationLog', communicationLogSchema)) as import("mongoose").Model<ICommunicationLog>;

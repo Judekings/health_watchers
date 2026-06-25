@@ -36,4 +36,4 @@ const subscriptionSchema = new Schema<ISubscription>(
   { timestamps: true, versionKey: false }
 );
 
-export const SubscriptionModel = models.Subscription || model<ISubscription>('Subscription', subscriptionSchema);
+export const SubscriptionModel = (models.Subscription || model<ISubscription>('Subscription', subscriptionSchema)) as import("mongoose").Model<ISubscription>;

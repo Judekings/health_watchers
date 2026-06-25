@@ -24,4 +24,4 @@ const cptSchema = new Schema<CPT>(
 
 cptSchema.index({ description: 'text', code: 'text' });
 
-export const CPTModel = models.CPT || model<CPT>('CPT', cptSchema);
+export const CPTModel = (models.CPT || model<CPT>('CPT', cptSchema)) as import("mongoose").Model<CPT>;

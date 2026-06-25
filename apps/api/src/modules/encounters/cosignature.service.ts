@@ -42,7 +42,7 @@ export class CoSignatureService {
   /**
    * Get pending co-signature queue for a doctor
    */
-  static async getPendingCoSignatureQueue(doctorId: string, clinicId: string) {
+  static async getPendingCoSignatureQueue(doctorId: string, clinicId: string): Promise<any[]> {
     return EncounterModel.find({
       clinicId: new Types.ObjectId(clinicId),
       requiresCoSignature: true,
@@ -77,7 +77,7 @@ export class CoSignatureService {
       throw new Error('This encounter has already been co-signed');
     }
     
-    encounter.coSignedBy = new Types.ObjectId(doctorId);
+    encounter.coSignedBy = new Types.ObjectId(doctorId) as any;
     encounter.coSignedAt = new Date();
     encounter.coSignatureNotes = notes;
     encounter.coSignatureStatus = 'approved';
@@ -113,7 +113,7 @@ export class CoSignatureService {
       throw new Error('Rejection notes are required');
     }
     
-    encounter.coSignedBy = new Types.ObjectId(doctorId);
+    encounter.coSignedBy = new Types.ObjectId(doctorId) as any;
     encounter.coSignedAt = new Date();
     encounter.coSignatureNotes = notes;
     encounter.coSignatureStatus = 'rejected';

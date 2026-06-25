@@ -27,6 +27,7 @@ import {
   triageAssessmentSchema,
 } from './ai.validation';
 import { assessTriage, addToTriageQueue, getTriageQueue, updateTriageStatus } from './triage.service';
+import { populationHealthRoutes } from './population-health.controller';
 
 const router = Router();
 
@@ -249,10 +250,10 @@ router.post(
         })),
         recentEncounters: recentEncounters.map((encounter) => ({
           chiefComplaint: encounter.chiefComplaint,
-          diagnosis: encounter.diagnosis,
+          diagnosis: encounter.diagnosis as any,
           notes: encounter.notes,
           createdAt: encounter.createdAt,
-        })),
+        })) as any,
         riskFactors: Array.from(
           new Set([
             ...(patient as any).riskFactors ?? [],
@@ -334,9 +335,9 @@ router.post('/insights', authenticate, async (req: Request, res: Response) => {
       encounters.map((e) => ({
         chiefComplaint: e.chiefComplaint,
         notes: e.notes,
-        diagnosis: e.diagnosis,
+        diagnosis: e.diagnosis as any,
         createdAt: e.createdAt,
-      })),
+      })) as any,
     );
 
     const duration = Date.now() - startTime;
@@ -728,7 +729,7 @@ router.post(
 );
 
 // POST /api/v1/ai/triage
-router.post('/triage', authenticate, validateRequest(triageAssessmentSchema), async (req: Request, res: Response) => {
+router.post('/triage', authenticate, validateRequest({ body: triageAssessmentSchema }), async (req: Request, res: Response) => {
   try {
     if (!isAIServiceAvailable()) {
       return res.status(503).json({
@@ -756,7 +757,7 @@ router.post('/triage', authenticate, validateRequest(triageAssessmentSchema), as
 });
 
 // GET /api/v1/ai/triage/queue
-router.get('/triage/queue', authenticate, requireRoles(['CLINIC_ADMIN', 'NURSE']), async (req: Request, res: Response) => {
+router.get('/triage/queue', authenticate, requireRoles('CLINIC_ADMIN', 'NURSE'), async (req: Request, res: Response) => {
   try {
     const queue = await getTriageQueue(req.user!.clinicId);
     return res.json({ success: true, queue });
@@ -767,7 +768,7 @@ router.get('/triage/queue', authenticate, requireRoles(['CLINIC_ADMIN', 'NURSE']
 });
 
 // PUT /api/v1/ai/triage/:id/status
-router.put('/triage/:id/status', authenticate, requireRoles(['CLINIC_ADMIN', 'NURSE']), async (req: Request, res: Response) => {
+router.put('/triage/:id/status', authenticate, requireRoles('CLINIC_ADMIN', 'NURSE'), async (req: Request, res: Response) => {
   try {
     const { status } = req.body;
     if (!['pending', 'seen', 'discharged'].includes(status)) {

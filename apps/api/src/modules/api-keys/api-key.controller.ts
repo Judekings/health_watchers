@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { ApiKeyModel, generateApiKey, getKeyPrefix, hashApiKey } from './models/api-key.model';
 import { ApiKeyUsageModel } from './models/api-key-usage.model';
 import { CreateApiKeyDto, UpdateApiKeyDto, ListApiKeysQuery } from './api-key.validation';
-import { AuthenticatedUser } from '@health-watchers/types';
+import { AuthenticatedUser } from '@api/types/express';
 
 type AuthenticatedRequest = Request & { user: AuthenticatedUser };
 
@@ -33,7 +33,7 @@ export const createApiKey = async (req: AuthenticatedRequest, res: Response) => 
       data: {
         id: apiKey._id,
         name: apiKey.name,
-        keyPrefix: apiKey.keyPrefix,
+        keyPrefix: apiKey.prefix,
         key: rawKey, // Only returned once at creation
         scopes: apiKey.scopes,
         isActive: apiKey.isActive,
@@ -52,7 +52,7 @@ export const createApiKey = async (req: AuthenticatedRequest, res: Response) => 
  */
 export const listApiKeys = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { page, limit, isActive } = req.query as ListApiKeysQuery;
+    const { page, limit, isActive } = req.query as unknown as ListApiKeysQuery;
     const { userId, clinicId } = req.user;
 
     const filter: any = { userId, clinicId };

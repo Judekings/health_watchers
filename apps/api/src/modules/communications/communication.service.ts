@@ -1,6 +1,6 @@
 import { CommunicationLogModel, ICommunicationLog } from './communication-log.model';
 import { LogCommunicationInput, ListCommunicationsQuery } from './communication.validation';
-import { auditLog } from '../../services/audit.service';
+import { auditLog } from '../audit/audit.service';
 import { paginate } from '../../utils/paginate';
 import { PatientModel } from '../patients/models/patient.model';
 
@@ -122,11 +122,11 @@ export class CommunicationService {
     return {
       data: result.data,
       meta: {
-        total: result.total,
-        page: result.page,
-        limit: result.limit,
-        totalPages: result.totalPages,
-        hasNextPage: result.hasNextPage,
+        total: result.meta.total,
+        page: result.meta.page,
+        limit: result.meta.limit,
+        totalPages: result.meta.totalPages,
+        hasNextPage: result.meta.hasNextPage,
       },
     };
   }

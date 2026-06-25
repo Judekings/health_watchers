@@ -63,4 +63,4 @@ batchPaymentSchema.index({ clinicId: 1, status: 1 });
 batchPaymentSchema.index({ clinicId: 1, createdAt: -1 });
 
 export const BatchPaymentModel =
-  models.BatchPayment || model<IBatchPayment>('BatchPayment', batchPaymentSchema);
+  (models.BatchPayment || model<IBatchPayment>('BatchPayment', batchPaymentSchema)) as import("mongoose").Model<IBatchPayment>;

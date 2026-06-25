@@ -14,10 +14,10 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const baas = await BAAModel.find({ clinicId: req.user!.clinicId }).sort({ createdAt: -1 });
-      res.json(baas);
+      return res.json(baas);
     } catch (err) {
-      logger.error('Error fetching BAAs:', err);
-      res.status(500).json({ error: 'InternalServerError' });
+      logger.error(`Error fetching BAAs: ${err}`);
+      return res.status(500).json({ error: 'InternalServerError' });
     }
   }
 );
@@ -49,10 +49,10 @@ router.post(
         { upsert: true, new: true }
       );
 
-      res.json(baa);
+      return res.json(baa);
     } catch (err) {
-      logger.error('Error creating/updating BAA:', err);
-      res.status(500).json({ error: 'InternalServerError' });
+      logger.error(`Error creating/updating BAA: ${err}`);
+      return res.status(500).json({ error: 'InternalServerError' });
     }
   }
 );
@@ -67,10 +67,10 @@ router.get(
       const breaches = await BreachNotificationModel.find({ clinicId: req.user!.clinicId }).sort({
         detectedAt: -1,
       });
-      res.json(breaches);
+      return res.json(breaches);
     } catch (err) {
-      logger.error('Error fetching breaches:', err);
-      res.status(500).json({ error: 'InternalServerError' });
+      logger.error(`Error fetching breaches: ${err}`);
+      return res.status(500).json({ error: 'InternalServerError' });
     }
   }
 );
@@ -107,10 +107,10 @@ router.post(
       });
 
       logger.warn(`[HIPAA] Breach detected for clinic ${req.user!.clinicId}: ${breachType}`);
-      res.status(201).json(breach);
+      return res.status(201).json(breach);
     } catch (err) {
-      logger.error('Error reporting breach:', err);
-      res.status(500).json({ error: 'InternalServerError' });
+      logger.error(`Error reporting breach: ${err}`);
+      return res.status(500).json({ error: 'InternalServerError' });
     }
   }
 );
