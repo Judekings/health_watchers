@@ -163,7 +163,6 @@ spec:
           mountPath: /data/db
         - name: keyfile
           mountPath: /etc/mongodb
-          defaultMode: 0400
       - name: mongodb-exporter
         image: percona/mongodb_exporter:latest
         ports:
