@@ -285,10 +285,14 @@ app.post('/reconcile', requireSecret, checkCircuitBreakerMiddleware, async (req,
     const { expectedPayments, accountAddress, tolerance } = req.body;
 
     if (!expectedPayments || !Array.isArray(expectedPayments) || !accountAddress) {
-      return res.status(400).json({ error: 'expectedPayments array and accountAddress are required' });
+      return res
+        .status(400)
+        .json({ error: 'expectedPayments array and accountAddress are required' });
     }
 
-    const report = await runReconciliation(expectedPayments as PaymentRecord[], accountAddress, { tolerance });
+    const report = await runReconciliation(expectedPayments as PaymentRecord[], accountAddress, {
+      tolerance,
+    });
     recordSuccess();
     return res.json({ success: true, ...report });
   } catch (error: any) {
@@ -436,7 +440,12 @@ app.post('/cold-wallet/rotate', requireSecret, (req, res) => {
       });
     }
 
-    const { newKey, rotationEvent } = rotateKey(oldKeyId, encryptionPassword, reason || 'Scheduled rotation', actor);
+    const { newKey, rotationEvent } = rotateKey(
+      oldKeyId,
+      encryptionPassword,
+      reason || 'Scheduled rotation',
+      actor
+    );
     recordSuccess();
 
     return res.json({
@@ -456,7 +465,7 @@ app.post('/cold-wallet/rotate', requireSecret, (req, res) => {
 app.get('/cold-wallet/keys', requireSecret, (req, res) => {
   try {
     const keyIds = getStoredKeyIds();
-    const keysMetadata = keyIds.map(id => getKeyMetadata(id)).filter(Boolean);
+    const keysMetadata = keyIds.map((id) => getKeyMetadata(id)).filter(Boolean);
 
     recordSuccess();
     return res.json({ success: true, keys: keysMetadata, count: keysMetadata.length });

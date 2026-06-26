@@ -21,11 +21,11 @@ interface SurgeMultiplier {
 
 // Configuration for surge pricing tiers
 const SURGE_MULTIPLIERS: SurgeMultiplier[] = [
-  { threshold: 0, multiplier: 1.0 },      // Normal
-  { threshold: 50, multiplier: 1.5 },     // 50% increase at 50 ops
-  { threshold: 100, multiplier: 2.0 },    // 100% increase at 100 ops
-  { threshold: 200, multiplier: 3.0 },    // 200% increase at 200 ops
-  { threshold: 500, multiplier: 5.0 },    // 500% increase at 500 ops
+  { threshold: 0, multiplier: 1.0 }, // Normal
+  { threshold: 50, multiplier: 1.5 }, // 50% increase at 50 ops
+  { threshold: 100, multiplier: 2.0 }, // 100% increase at 100 ops
+  { threshold: 200, multiplier: 3.0 }, // 200% increase at 200 ops
+  { threshold: 500, multiplier: 5.0 }, // 500% increase at 500 ops
 ];
 
 // Subsidy configurations
@@ -35,10 +35,10 @@ interface SubsidyConfig {
 }
 
 const SUBSIDY_CONFIGS: Record<string, SubsidyConfig> = {
-  'NONE': { percentage: 0, maxSubsidyPerTransaction: 0 },
-  'LOW': { percentage: 25, maxSubsidyPerTransaction: 50 },      // 25% subsidy, max 50 stroops
-  'MEDIUM': { percentage: 50, maxSubsidyPerTransaction: 100 },  // 50% subsidy, max 100 stroops
-  'HIGH': { percentage: 100, maxSubsidyPerTransaction: 200 },   // 100% subsidy, max 200 stroops
+  NONE: { percentage: 0, maxSubsidyPerTransaction: 0 },
+  LOW: { percentage: 25, maxSubsidyPerTransaction: 50 }, // 25% subsidy, max 50 stroops
+  MEDIUM: { percentage: 50, maxSubsidyPerTransaction: 100 }, // 50% subsidy, max 100 stroops
+  HIGH: { percentage: 100, maxSubsidyPerTransaction: 200 }, // 100% subsidy, max 200 stroops
 };
 
 /**
@@ -62,7 +62,10 @@ export function xlmToStroops(xlm: string | number): number {
  * @param numberOfOperations Number of operations in the transaction
  * @param baseFeeRate Base fee per operation (in stroops)
  */
-export function calculateBaseFee(numberOfOperations: number = 1, baseFeeRate: number = parseInt(BASE_FEE, 10)): number {
+export function calculateBaseFee(
+  numberOfOperations: number = 1,
+  baseFeeRate: number = parseInt(BASE_FEE, 10)
+): number {
   logger.debug({ numberOfOperations, baseFeeRate }, 'Calculating base fee');
   return baseFeeRate * numberOfOperations;
 }
@@ -101,7 +104,10 @@ export function calculateSurgedFee(baseFee: number, pendingOperations: number = 
  * @param baseFee Fee to subsidize
  * @param subsidyLevel Subsidy level (NONE, LOW, MEDIUM, HIGH)
  */
-export function calculateSubsidizedFee(baseFee: number, subsidyLevel: string = 'NONE'): { subsidizedFee: number; discountPercentage: number; subsidyAmount: number } {
+export function calculateSubsidizedFee(
+  baseFee: number,
+  subsidyLevel: string = 'NONE'
+): { subsidizedFee: number; discountPercentage: number; subsidyAmount: number } {
   const config = SUBSIDY_CONFIGS[subsidyLevel] || SUBSIDY_CONFIGS['NONE'];
 
   const subsidyAmount = Math.min(
@@ -111,7 +117,10 @@ export function calculateSubsidizedFee(baseFee: number, subsidyLevel: string = '
 
   const subsidizedFee = Math.max(0, baseFee - subsidyAmount);
 
-  logger.debug({ baseFee, subsidyLevel, subsidyAmount, subsidizedFee }, 'Calculated subsidized fee');
+  logger.debug(
+    { baseFee, subsidyLevel, subsidyAmount, subsidizedFee },
+    'Calculated subsidized fee'
+  );
 
   return {
     subsidizedFee,
@@ -155,7 +164,11 @@ export function calculateCompleteFeatures(options: {
 /**
  * Format fee for display with XLM conversion
  */
-export function formatFeeForDisplay(feeInStroops: number): { stroops: string; xlm: string; display: string } {
+export function formatFeeForDisplay(feeInStroops: number): {
+  stroops: string;
+  xlm: string;
+  display: string;
+} {
   const xlm = stroopsToXlm(feeInStroops);
   return {
     stroops: feeInStroops.toString(),
@@ -167,7 +180,11 @@ export function formatFeeForDisplay(feeInStroops: number): { stroops: string; xl
 /**
  * Get available subsidy tiers
  */
-export function getAvailableSubsidyTiers(): Array<{ tier: string; percentage: number; maxSubsidy: number }> {
+export function getAvailableSubsidyTiers(): Array<{
+  tier: string;
+  percentage: number;
+  maxSubsidy: number;
+}> {
   return Object.entries(SUBSIDY_CONFIGS).map(([tier, config]) => ({
     tier,
     percentage: config.percentage,
@@ -178,7 +195,11 @@ export function getAvailableSubsidyTiers(): Array<{ tier: string; percentage: nu
 /**
  * Get surge pricing tiers
  */
-export function getSurgePricingTiers(): Array<{ threshold: number; multiplier: number; description: string }> {
+export function getSurgePricingTiers(): Array<{
+  threshold: number;
+  multiplier: number;
+  description: string;
+}> {
   const descriptions = [
     'Normal network conditions',
     'Moderate congestion',

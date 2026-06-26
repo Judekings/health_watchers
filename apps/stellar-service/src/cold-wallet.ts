@@ -52,7 +52,13 @@ export interface KeyRotationEvent {
 
 export interface AuditLog {
   eventId: string;
-  eventType: 'key_creation' | 'key_rotation' | 'signing_request' | 'key_retrieval' | 'encryption_change' | 'access_denied';
+  eventType:
+    | 'key_creation'
+    | 'key_rotation'
+    | 'signing_request'
+    | 'key_retrieval'
+    | 'encryption_change'
+    | 'access_denied';
   keyId: string;
   timestamp: string;
   actor: string;
@@ -257,7 +263,10 @@ export function signTransaction(
     const keypair = retrieveKeyPair(request.keyId, '', request.requester);
 
     // Deserialize and sign the transaction
-    const transaction = new Transaction(request.transactionXdr, 'Test SDF Network ; September 2015');
+    const transaction = new Transaction(
+      request.transactionXdr,
+      'Test SDF Network ; September 2015'
+    );
     transaction.sign(keypair);
 
     const signedXdr = transaction.toEnvelope().toXDR('base64');
@@ -304,7 +313,10 @@ export function signTransaction(
       details: { requestId },
     });
 
-    logger.error({ requestId, keyId: request.keyId, error: error.message }, 'Transaction signing failed');
+    logger.error(
+      { requestId, keyId: request.keyId, error: error.message },
+      'Transaction signing failed'
+    );
 
     return response;
   }
@@ -364,10 +376,7 @@ export function rotateKey(
       details: { newKeyId: newStore.keyId, reason, eventId },
     });
 
-    logger.info(
-      { oldKeyId, newKeyId: newStore.keyId, eventId, reason },
-      'Key rotation completed'
-    );
+    logger.info({ oldKeyId, newKeyId: newStore.keyId, eventId, reason }, 'Key rotation completed');
 
     return { oldKey: oldStore, newKey: newStore, rotationEvent };
   } catch (error: any) {
@@ -403,9 +412,7 @@ export function rotateKey(
 /**
  * Log an audit event
  */
-export function logAuditEvent(
-  event: Omit<AuditLog, 'eventId' | 'timestamp'>
-): AuditLog {
+export function logAuditEvent(event: Omit<AuditLog, 'eventId' | 'timestamp'>): AuditLog {
   const auditEvent: AuditLog = {
     ...event,
     eventId: `audit-${crypto.randomUUID()}`,
@@ -439,15 +446,15 @@ export function getAuditLogs(filter?: {
   let logs = [...auditLogs];
 
   if (filter?.keyId) {
-    logs = logs.filter(l => l.keyId === filter.keyId);
+    logs = logs.filter((l) => l.keyId === filter.keyId);
   }
 
   if (filter?.eventType) {
-    logs = logs.filter(l => l.eventType === filter.eventType);
+    logs = logs.filter((l) => l.eventType === filter.eventType);
   }
 
   if (filter?.actor) {
-    logs = logs.filter(l => l.actor === filter.actor);
+    logs = logs.filter((l) => l.actor === filter.actor);
   }
 
   const limit = filter?.limit ?? 100;
@@ -471,7 +478,9 @@ export function getStoredKeyIds(): string[] {
 /**
  * Get key metadata
  */
-export function getKeyMetadata(keyId: string): Omit<SecureKeyStore, 'encryptedSecretKey' | 'iv' | 'salt'> | null {
+export function getKeyMetadata(
+  keyId: string
+): Omit<SecureKeyStore, 'encryptedSecretKey' | 'iv' | 'salt'> | null {
   const store = keyStore.get(keyId);
   if (!store) {
     return null;
@@ -533,8 +542,8 @@ export function getColdWalletStatistics(): {
   totalRotations: number;
   auditLogSize: number;
 } {
-  const activeKeys = Array.from(keyStore.values()).filter(k => k.isActive).length;
-  const totalSigningRequests = auditLogs.filter(l => l.eventType === 'signing_request').length;
+  const activeKeys = Array.from(keyStore.values()).filter((k) => k.isActive).length;
+  const totalSigningRequests = auditLogs.filter((l) => l.eventType === 'signing_request').length;
   const totalRotations = rotationEvents.length;
 
   return {

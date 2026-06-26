@@ -52,7 +52,12 @@ describe('Cold Wallet', () => {
   describe('Key Rotation', () => {
     it('should rotate a key', () => {
       const oldStore = coldWallet.storeKeyPair(testKeypair, encryptionPassword);
-      const { newKey, oldKey } = coldWallet.rotateKey(oldStore.keyId, encryptionPassword, 'Scheduled rotation', 'admin');
+      const { newKey, oldKey } = coldWallet.rotateKey(
+        oldStore.keyId,
+        encryptionPassword,
+        'Scheduled rotation',
+        'admin'
+      );
 
       expect(oldKey.isActive).toBe(false);
       expect(newKey.isActive).toBe(true);
@@ -100,7 +105,7 @@ describe('Cold Wallet', () => {
 
       const logs = coldWallet.getAuditLogs({ limit: 10 });
       expect(logs.length).toBeGreaterThan(0);
-      expect(logs.some(l => l.eventType === 'key_creation')).toBe(true);
+      expect(logs.some((l) => l.eventType === 'key_creation')).toBe(true);
     });
 
     it('should filter audit logs by key ID', () => {
@@ -109,7 +114,7 @@ describe('Cold Wallet', () => {
 
       const logs = coldWallet.getAuditLogs({ keyId: store.keyId });
       expect(logs.length).toBeGreaterThan(0);
-      expect(logs.every(l => l.keyId === store.keyId)).toBe(true);
+      expect(logs.every((l) => l.keyId === store.keyId)).toBe(true);
     });
 
     it('should filter audit logs by event type', () => {
@@ -117,7 +122,7 @@ describe('Cold Wallet', () => {
 
       const logs = coldWallet.getAuditLogs({ eventType: 'key_creation' });
       expect(logs.length).toBeGreaterThan(0);
-      expect(logs.every(l => l.eventType === 'key_creation')).toBe(true);
+      expect(logs.every((l) => l.eventType === 'key_creation')).toBe(true);
     });
 
     it('should filter audit logs by actor', () => {
@@ -126,14 +131,14 @@ describe('Cold Wallet', () => {
 
       const logs = coldWallet.getAuditLogs({ actor: 'test-actor' });
       expect(logs.length).toBeGreaterThan(0);
-      expect(logs.every(l => l.actor === 'test-actor')).toBe(true);
+      expect(logs.every((l) => l.actor === 'test-actor')).toBe(true);
     });
 
     it('should record successful operations', () => {
       const store = coldWallet.storeKeyPair(testKeypair, encryptionPassword);
 
       const logs = coldWallet.getAuditLogs({ keyId: store.keyId });
-      const successLogs = logs.filter(l => l.result === 'success');
+      const successLogs = logs.filter((l) => l.result === 'success');
       expect(successLogs.length).toBeGreaterThan(0);
     });
 
@@ -145,7 +150,7 @@ describe('Cold Wallet', () => {
       }
 
       const logs = coldWallet.getAuditLogs({ eventType: 'key_retrieval' });
-      const failedLogs = logs.filter(l => l.result === 'failure');
+      const failedLogs = logs.filter((l) => l.result === 'failure');
       expect(failedLogs.length).toBeGreaterThan(0);
     });
   });

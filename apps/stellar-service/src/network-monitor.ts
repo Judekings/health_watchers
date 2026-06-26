@@ -41,10 +41,10 @@ export interface NetworkStatus {
 
 // Alert thresholds
 const ALERT_THRESHOLDS = {
-  highFee: 5000,           // stroops
-  highBacklog: 200,         // pending transactions
-  lowMaxTxSetSize: 100,     // transactions
-  protocolVersionLag: 3,    // versions behind
+  highFee: 5000, // stroops
+  highBacklog: 200, // pending transactions
+  lowMaxTxSetSize: 100, // transactions
+  protocolVersionLag: 3, // versions behind
 };
 
 // State for tracking metrics over time
@@ -74,7 +74,10 @@ export async function getLedgerStatus(): Promise<LedgerStatus> {
     logger.debug({ ...status, durationMs: Date.now() - start }, 'Fetched ledger status');
     return status;
   } catch (error: any) {
-    logger.error({ error: error.message, durationMs: Date.now() - start }, 'Failed to get ledger status');
+    logger.error(
+      { error: error.message, durationMs: Date.now() - start },
+      'Failed to get ledger status'
+    );
     throw error;
   }
 }
@@ -101,7 +104,8 @@ export async function getTransactionBacklog(): Promise<TransactionBacklog> {
       }
     }
 
-    const averageWaitTime = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
+    const averageWaitTime =
+      times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
 
     // Fetch ledger to get max transaction set size
     const ledger = await server.ledgers().limit(1).order('desc').call();
@@ -126,7 +130,10 @@ export async function getTransactionBacklog(): Promise<TransactionBacklog> {
     logger.debug({ ...backlog, durationMs: Date.now() - start }, 'Calculated transaction backlog');
     return backlog;
   } catch (error: any) {
-    logger.error({ error: error.message, durationMs: Date.now() - start }, 'Failed to get transaction backlog');
+    logger.error(
+      { error: error.message, durationMs: Date.now() - start },
+      'Failed to get transaction backlog'
+    );
     throw error;
   }
 }
@@ -159,7 +166,8 @@ export async function checkNetworkAlerts(): Promise<NetworkAlert[]> {
     if (backlog.pendingTransactions > ALERT_THRESHOLDS.highBacklog) {
       alerts.push({
         id: `alert-backlog-${Date.now()}`,
-        level: backlog.pendingTransactions > ALERT_THRESHOLDS.highBacklog * 1.5 ? 'critical' : 'warning',
+        level:
+          backlog.pendingTransactions > ALERT_THRESHOLDS.highBacklog * 1.5 ? 'critical' : 'warning',
         timestamp: now,
         message: `High transaction backlog: ${backlog.pendingTransactions} pending`,
         metric: 'pendingTransactions',
@@ -202,13 +210,15 @@ export async function checkNetworkAlerts(): Promise<NetworkAlert[]> {
     return alerts;
   } catch (error: any) {
     logger.error({ error: error.message }, 'Failed to check network alerts');
-    return [{
-      id: `alert-error-${Date.now()}`,
-      level: 'critical',
-      timestamp: now,
-      message: `Failed to check network health: ${error.message}`,
-      metric: 'systemError',
-    }];
+    return [
+      {
+        id: `alert-error-${Date.now()}`,
+        level: 'critical',
+        timestamp: now,
+        message: `Failed to check network health: ${error.message}`,
+        metric: 'systemError',
+      },
+    ];
   }
 }
 
@@ -225,7 +235,7 @@ export async function getNetworkStatus(): Promise<NetworkStatus> {
       checkNetworkAlerts(),
     ]);
 
-    const isHealthy = alerts.filter(a => a.level === 'critical').length === 0;
+    const isHealthy = alerts.filter((a) => a.level === 'critical').length === 0;
 
     const status: NetworkStatus = {
       isHealthy,
@@ -250,7 +260,10 @@ export async function getNetworkStatus(): Promise<NetworkStatus> {
 
     return status;
   } catch (error: any) {
-    logger.error({ error: error.message, durationMs: Date.now() - start }, 'Failed to get network status');
+    logger.error(
+      { error: error.message, durationMs: Date.now() - start },
+      'Failed to get network status'
+    );
     throw error;
   }
 }
@@ -258,7 +271,10 @@ export async function getNetworkStatus(): Promise<NetworkStatus> {
 /**
  * Track ledger growth
  */
-export async function trackLedgerGrowth(): Promise<{ ledgersPerSecond: number; lastLedger: number }> {
+export async function trackLedgerGrowth(): Promise<{
+  ledgersPerSecond: number;
+  lastLedger: number;
+}> {
   const currentLedger = await getLedgerStatus();
   const currentTime = Date.now();
   const timeDelta = (currentTime - lastCheckTime) / 1000; // in seconds
@@ -272,10 +288,7 @@ export async function trackLedgerGrowth(): Promise<{ ledgersPerSecond: number; l
   lastLedgerSequence = currentLedger.ledgerSequence;
   lastCheckTime = currentTime;
 
-  logger.debug(
-    { ledgersPerSecond, ledgerDelta, timeDelta },
-    'Tracked ledger growth'
-  );
+  logger.debug({ ledgersPerSecond, ledgerDelta, timeDelta }, 'Tracked ledger growth');
 
   return { ledgersPerSecond, lastLedger: currentLedger.ledgerSequence };
 }
@@ -298,7 +311,10 @@ export function clearAlertHistory(): void {
 /**
  * Start periodic network monitoring
  */
-export function startNetworkMonitoring(intervalMs: number = 30000, callback?: (status: NetworkStatus) => void): () => void {
+export function startNetworkMonitoring(
+  intervalMs: number = 30000,
+  callback?: (status: NetworkStatus) => void
+): () => void {
   logger.info({ intervalMs }, 'Starting network monitoring');
 
   const interval = setInterval(async () => {

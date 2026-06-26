@@ -8,13 +8,15 @@ jest.mock('../stellar.js', () => ({
       limit: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
       call: jest.fn().mockResolvedValue({
-        records: [{
-          sequence: 12345,
-          closed_at: '2024-01-01T00:00:00Z',
-          base_fee_in_stroops: 100,
-          max_tx_set_size: 1000,
-          protocol_version: 20,
-        }],
+        records: [
+          {
+            sequence: 12345,
+            closed_at: '2024-01-01T00:00:00Z',
+            base_fee_in_stroops: 100,
+            max_tx_set_size: 1000,
+            protocol_version: 20,
+          },
+        ],
       }),
     })),
     transactions: jest.fn(() => ({
@@ -89,7 +91,7 @@ describe('Network Monitor', () => {
     it('should have valid alert levels', async () => {
       const alerts = await networkMonitor.checkNetworkAlerts();
       const validLevels = ['info', 'warning', 'critical'];
-      alerts.forEach(alert => {
+      alerts.forEach((alert) => {
         expect(validLevels).toContain(alert.level);
       });
     });

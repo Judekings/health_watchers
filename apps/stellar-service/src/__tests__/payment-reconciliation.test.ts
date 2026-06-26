@@ -67,7 +67,7 @@ describe('Payment Reconciliation', () => {
 
     it('should identify perfect matches', () => {
       const matches = reconciliation.matchPayments(mockExpectedPayments, mockLedgerTransactions);
-      const perfectMatches = matches.filter(m => m.matched);
+      const perfectMatches = matches.filter((m) => m.matched);
       expect(perfectMatches.length).toBeGreaterThan(0);
     });
 
@@ -79,11 +79,10 @@ describe('Payment Reconciliation', () => {
     });
 
     it('should allow tolerance for small differences', () => {
-      const matches = reconciliation.matchPayments(
-        mockExpectedPayments,
-        mockLedgerTransactions,
-        { amountVariance: 2, timeWindow: 5000 }
-      );
+      const matches = reconciliation.matchPayments(mockExpectedPayments, mockLedgerTransactions, {
+        amountVariance: 2,
+        timeWindow: 5000,
+      });
       const secondMatch = matches[1];
       expect(secondMatch).toBeDefined();
     });
@@ -155,9 +154,13 @@ describe('Payment Reconciliation', () => {
     });
 
     it('should support different resolution actions', () => {
-      const actions: Array<'mark_resolved' | 'investigate' | 'manual_review'> = ['mark_resolved', 'investigate', 'manual_review'];
+      const actions: Array<'mark_resolved' | 'investigate' | 'manual_review'> = [
+        'mark_resolved',
+        'investigate',
+        'manual_review',
+      ];
 
-      actions.forEach(action => {
+      actions.forEach((action) => {
         const resolution = reconciliation.recordResolution({
           discrepancyId: `disc-${action}`,
           action,
@@ -241,7 +244,7 @@ describe('Payment Reconciliation', () => {
       );
       const report = reconciliation.generateReconciliationReport(matches, mockLedgerTransactions);
 
-      const missingPayments = report.discrepancies.filter(d => d.type === 'missing_payment');
+      const missingPayments = report.discrepancies.filter((d) => d.type === 'missing_payment');
       expect(missingPayments.length).toBeGreaterThanOrEqual(0);
     });
 
@@ -250,7 +253,7 @@ describe('Payment Reconciliation', () => {
       const matches = reconciliation.matchPayments(mockExpectedPayments, mockLedgerTransactions);
       const report = reconciliation.generateReconciliationReport(matches, mockLedgerTransactions);
 
-      const missingLedgers = report.discrepancies.filter(d => d.type === 'missing_ledger');
+      const missingLedgers = report.discrepancies.filter((d) => d.type === 'missing_ledger');
       // Should have at least one unmatched ledger transaction
       expect(report.unmatched.ledger.length).toBeGreaterThanOrEqual(0);
     });

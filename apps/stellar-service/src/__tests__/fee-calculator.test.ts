@@ -154,15 +154,15 @@ describe('Fee Calculator', () => {
     it('should return all subsidy tiers', () => {
       const tiers = getAvailableSubsidyTiers();
       expect(tiers.length).toBeGreaterThan(0);
-      expect(tiers.some(t => t.tier === 'NONE')).toBe(true);
-      expect(tiers.some(t => t.tier === 'LOW')).toBe(true);
-      expect(tiers.some(t => t.tier === 'MEDIUM')).toBe(true);
-      expect(tiers.some(t => t.tier === 'HIGH')).toBe(true);
+      expect(tiers.some((t) => t.tier === 'NONE')).toBe(true);
+      expect(tiers.some((t) => t.tier === 'LOW')).toBe(true);
+      expect(tiers.some((t) => t.tier === 'MEDIUM')).toBe(true);
+      expect(tiers.some((t) => t.tier === 'HIGH')).toBe(true);
     });
 
     it('should have correct percentages for each tier', () => {
       const tiers = getAvailableSubsidyTiers();
-      const tierMap = Object.fromEntries(tiers.map(t => [t.tier, t.percentage]));
+      const tierMap = Object.fromEntries(tiers.map((t) => [t.tier, t.percentage]));
       expect(tierMap.NONE).toBe(0);
       expect(tierMap.LOW).toBe(25);
       expect(tierMap.MEDIUM).toBe(50);
@@ -180,7 +180,7 @@ describe('Fee Calculator', () => {
 
     it('should have correct multipliers', () => {
       const tiers = getSurgePricingTiers();
-      const multipliers = tiers.map(t => t.multiplier);
+      const multipliers = tiers.map((t) => t.multiplier);
       expect(multipliers).toContain(1.0);
       expect(multipliers).toContain(1.5);
       expect(multipliers).toContain(2.0);
