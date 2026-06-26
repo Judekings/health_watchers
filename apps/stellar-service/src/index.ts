@@ -69,6 +69,20 @@ import {
   clearReconciliationHistory,
   type PaymentRecord,
 } from './payment-reconciliation.js';
+import {
+  storeKeyPair,
+  retrieveKeyPair,
+  signTransaction,
+  rotateKey,
+  getAuditLogs,
+  getRotationHistory,
+  getStoredKeyIds,
+  getKeyMetadata,
+  deactivateKey,
+  getColdWalletStatistics,
+  clearAllKeys,
+  type SigningRequest,
+} from './cold-wallet.js';
 
 dotenv.config();
 
@@ -351,6 +365,188 @@ app.delete('/reconcile/history', requireSecret, (req, res) => {
     clearReconciliationHistory();
     recordSuccess();
     return res.json({ success: true, message: 'Reconciliation history cleared' });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /cold-wallet/keys — Store an encrypted keypair
+app.post('/cold-wallet/keys', requireSecret, (req, res) => {
+  try {
+    const { keypair, encryptionPassword, metadata } = req.body;
+
+    if (!keypair || !encryptionPassword) {
+      return res.status(400).json({ error: 'keypair and encryptionPassword are required' });
+    }
+
+    // Create keypair from provided secret
+    const kp = Keypair.fromSecret(keypair.secret || keypair);
+    const store = storeKeyPair(kp, encryptionPassword, metadata);
+
+    recordSuccess();
+    return res.json({
+      success: true,
+      keyId: store.keyId,
+      publicKey: store.publicKey,
+      createdAt: store.createdAt,
+    });
+  } catch (error: any) {
+    recordFailure();
+    logger.error({ error: error.message }, 'Failed to store keypair');
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /cold-wallet/sign — Sign a transaction with a stored key
+app.post('/cold-wallet/sign', requireSecret, (req, res) => {
+  try {
+    const { keyId, transactionXdr, requester } = req.body;
+
+    if (!keyId || !transactionXdr || !requester) {
+      return res.status(400).json({
+        error: 'keyId, transactionXdr, and requester are required',
+      });
+    }
+
+    const request: Omit<SigningRequest, 'requestId' | 'timestamp'> = {
+      keyId,
+      transactionXdr,
+      requester,
+      signatureRequired: true,
+    };
+
+    const response = signTransaction(request);
+    recordSuccess();
+    return res.json(response);
+  } catch (error: any) {
+    recordFailure();
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /cold-wallet/rotate — Rotate a key
+app.post('/cold-wallet/rotate', requireSecret, (req, res) => {
+  try {
+    const { oldKeyId, encryptionPassword, reason, actor } = req.body;
+
+    if (!oldKeyId || !encryptionPassword || !actor) {
+      return res.status(400).json({
+        error: 'oldKeyId, encryptionPassword, and actor are required',
+      });
+    }
+
+    const { newKey, rotationEvent } = rotateKey(oldKeyId, encryptionPassword, reason || 'Scheduled rotation', actor);
+    recordSuccess();
+
+    return res.json({
+      success: true,
+      oldKeyId,
+      newKeyId: newKey.keyId,
+      publicKey: newKey.publicKey,
+      rotationEvent,
+    });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(400).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /cold-wallet/keys — List stored key IDs
+app.get('/cold-wallet/keys', requireSecret, (req, res) => {
+  try {
+    const keyIds = getStoredKeyIds();
+    const keysMetadata = keyIds.map(id => getKeyMetadata(id)).filter(Boolean);
+
+    recordSuccess();
+    return res.json({ success: true, keys: keysMetadata, count: keysMetadata.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /cold-wallet/keys/:keyId — Get key metadata
+app.get('/cold-wallet/keys/:keyId', requireSecret, (req, res) => {
+  try {
+    const { keyId } = req.params;
+    const metadata = getKeyMetadata(keyId);
+
+    if (!metadata) {
+      return res.status(404).json({ error: 'Key not found' });
+    }
+
+    recordSuccess();
+    return res.json({ success: true, ...metadata });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /cold-wallet/keys/:keyId/deactivate — Deactivate a key
+app.post('/cold-wallet/keys/:keyId/deactivate', requireSecret, (req, res) => {
+  try {
+    const { keyId } = req.params;
+    const { actor } = req.body;
+
+    if (!actor) {
+      return res.status(400).json({ error: 'actor is required' });
+    }
+
+    const success = deactivateKey(keyId, actor);
+
+    if (!success) {
+      return res.status(404).json({ error: 'Key not found' });
+    }
+
+    recordSuccess();
+    return res.json({ success: true, message: 'Key deactivated' });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /cold-wallet/audit-logs — Get audit logs
+app.get('/cold-wallet/audit-logs', requireSecret, (req, res) => {
+  try {
+    const filter = {
+      keyId: req.query.keyId as string,
+      eventType: req.query.eventType as string,
+      actor: req.query.actor as string,
+      limit: parseInt((req.query.limit as string) || '100', 10),
+    };
+
+    const logs = getAuditLogs(filter);
+    recordSuccess();
+    return res.json({ success: true, logs, count: logs.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /cold-wallet/rotations — Get key rotation history
+app.get('/cold-wallet/rotations', requireSecret, (req, res) => {
+  try {
+    const limit = parseInt((req.query.limit as string) || '50', 10);
+    const rotations = getRotationHistory(Math.min(limit, 200));
+
+    recordSuccess();
+    return res.json({ success: true, rotations, count: rotations.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /cold-wallet/statistics — Get cold wallet statistics
+app.get('/cold-wallet/statistics', requireSecret, (req, res) => {
+  try {
+    const stats = getColdWalletStatistics();
+    recordSuccess();
+    return res.json({ success: true, ...stats });
   } catch (error: any) {
     recordFailure();
     return res.status(500).json({ error: error.message });
