@@ -60,6 +60,15 @@ import {
   trackLedgerGrowth,
   startNetworkMonitoring,
 } from './network-monitor.js';
+import {
+  runReconciliation,
+  recordResolution,
+  getReconciliationHistory,
+  getResolutionHistory,
+  getReconciliationStatistics,
+  clearReconciliationHistory,
+  type PaymentRecord,
+} from './payment-reconciliation.js';
 
 dotenv.config();
 
@@ -250,6 +259,98 @@ app.get('/monitor/ledger-growth', checkCircuitBreakerMiddleware, async (_req, re
     const growth = await trackLedgerGrowth();
     recordSuccess();
     return res.json({ success: true, ...growth });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /reconcile — Run payment reconciliation
+app.post('/reconcile', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
+  try {
+    const { expectedPayments, accountAddress, tolerance } = req.body;
+
+    if (!expectedPayments || !Array.isArray(expectedPayments) || !accountAddress) {
+      return res.status(400).json({ error: 'expectedPayments array and accountAddress are required' });
+    }
+
+    const report = await runReconciliation(expectedPayments as PaymentRecord[], accountAddress, { tolerance });
+    recordSuccess();
+    return res.json({ success: true, ...report });
+  } catch (error: any) {
+    recordFailure();
+    logger.error({ error: error.message }, 'Reconciliation failed');
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /reconcile/history — Get reconciliation history
+app.get('/reconcile/history', requireSecret, (req, res) => {
+  try {
+    const limit = parseInt((req.query.limit as string) || '20', 10);
+    const history = getReconciliationHistory(Math.min(limit, 100));
+    recordSuccess();
+    return res.json({ success: true, reports: history, count: history.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /reconcile/statistics — Get reconciliation statistics
+app.get('/reconcile/statistics', requireSecret, (req, res) => {
+  try {
+    const stats = getReconciliationStatistics();
+    recordSuccess();
+    return res.json({ success: true, ...stats });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: POST /reconcile/resolution — Record a discrepancy resolution
+app.post('/reconcile/resolution', requireSecret, (req, res) => {
+  try {
+    const { discrepancyId, action, notes } = req.body;
+
+    if (!discrepancyId || !action) {
+      return res.status(400).json({ error: 'discrepancyId and action are required' });
+    }
+
+    const validActions = ['mark_resolved', 'investigate', 'manual_review'];
+    if (!validActions.includes(action)) {
+      return res.status(400).json({ error: `action must be one of: ${validActions.join(', ')}` });
+    }
+
+    const resolution = recordResolution({ discrepancyId, action, notes: notes || '' });
+    recordSuccess();
+    return res.json({ success: true, ...resolution });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: GET /reconcile/resolutions — Get resolution history
+app.get('/reconcile/resolutions', requireSecret, (req, res) => {
+  try {
+    const limit = parseInt((req.query.limit as string) || '100', 10);
+    const history = getResolutionHistory(Math.min(limit, 500));
+    recordSuccess();
+    return res.json({ success: true, resolutions: history, count: history.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: DELETE /reconcile/history — Clear reconciliation history
+app.delete('/reconcile/history', requireSecret, (req, res) => {
+  try {
+    clearReconciliationHistory();
+    recordSuccess();
+    return res.json({ success: true, message: 'Reconciliation history cleared' });
   } catch (error: any) {
     recordFailure();
     return res.status(500).json({ error: error.message });
