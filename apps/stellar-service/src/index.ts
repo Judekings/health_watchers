@@ -50,6 +50,16 @@ import {
   getAvailableSubsidyTiers,
   getSurgePricingTiers,
 } from './fee-calculator.js';
+import {
+  getNetworkStatus as getMonitoredNetworkStatus,
+  getLedgerStatus,
+  getTransactionBacklog,
+  checkNetworkAlerts,
+  getAlertHistory,
+  clearAlertHistory,
+  trackLedgerGrowth,
+  startNetworkMonitoring,
+} from './network-monitor.js';
 
 dotenv.config();
 
@@ -158,6 +168,92 @@ app.get('/health', async (_req, res) => {
     circuitBreaker: cbState,
     timestamp: new Date().toISOString(),
   });
+});
+
+// ✅ PUBLIC: GET /monitor/status - Comprehensive network status with monitoring
+app.get('/monitor/status', checkCircuitBreakerMiddleware, async (_req, res) => {
+  try {
+    const status = await getMonitoredNetworkStatus();
+    recordSuccess();
+    return res.json({ success: true, ...status });
+  } catch (error: any) {
+    recordFailure();
+    logger.error({ error: error.message }, 'Failed to get monitored network status');
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /monitor/ledger - Get ledger status only
+app.get('/monitor/ledger', checkCircuitBreakerMiddleware, async (_req, res) => {
+  try {
+    const ledger = await getLedgerStatus();
+    recordSuccess();
+    return res.json({ success: true, ledger });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /monitor/backlog - Get transaction backlog info
+app.get('/monitor/backlog', checkCircuitBreakerMiddleware, async (_req, res) => {
+  try {
+    const backlog = await getTransactionBacklog();
+    recordSuccess();
+    return res.json({ success: true, backlog });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /monitor/alerts - Get current network alerts
+app.get('/monitor/alerts', checkCircuitBreakerMiddleware, async (_req, res) => {
+  try {
+    const alerts = await checkNetworkAlerts();
+    recordSuccess();
+    return res.json({ success: true, alerts, timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /monitor/alerts/history - Get alert history
+app.get('/monitor/alerts/history', (req, res) => {
+  try {
+    const limit = parseInt((req.query.limit as string) || '50', 10);
+    const history = getAlertHistory(Math.min(limit, 100));
+    recordSuccess();
+    return res.json({ success: true, alerts: history, count: history.length });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PROTECTED: DELETE /monitor/alerts/history - Clear alert history
+app.delete('/monitor/alerts/history', requireSecret, (req, res) => {
+  try {
+    clearAlertHistory();
+    recordSuccess();
+    return res.json({ success: true, message: 'Alert history cleared' });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ PUBLIC: GET /monitor/ledger-growth - Get ledger growth rate
+app.get('/monitor/ledger-growth', checkCircuitBreakerMiddleware, async (_req, res) => {
+  try {
+    const growth = await trackLedgerGrowth();
+    recordSuccess();
+    return res.json({ success: true, ...growth });
+  } catch (error: any) {
+    recordFailure();
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // ✅ PROTECTED: POST /fund (requires secret, testnet only)
