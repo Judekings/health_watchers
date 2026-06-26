@@ -14,7 +14,7 @@ jest.mock('@stellar/stellar-sdk', () => ({
   Keypair: {
     random: () => ({
       publicKey: () => 'GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZQE3NMQKK6UUUHKKOAIB',
-      secret:    () => 'SCZANGBA5RLKJZ65NOVCKVS2VIOWV2MRDBBR7BVNKPKGZBJKHOSXWC3',
+      secret: () => 'SCZANGBA5RLKJZ65NOVCKVS2VIOWV2MRDBBR7BVNKPKGZBJKHOSXWC3',
     }),
   },
 }));
@@ -30,7 +30,7 @@ describe('keypair.service', () => {
       Keypair: {
         random: () => ({
           publicKey: () => 'GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZQE3NMQKK6UUUHKKOAIB',
-          secret:    () => 'SCZANGBA5RLKJZ65NOVCKVS2VIOWV2MRDBBR7BVNKPKGZBJKHOSXWC3',
+          secret: () => 'SCZANGBA5RLKJZ65NOVCKVS2VIOWV2MRDBBR7BVNKPKGZBJKHOSXWC3',
         }),
       },
     }));
@@ -51,7 +51,7 @@ describe('keypair.service', () => {
     it('produces different ciphertext each call (random IV)', () => {
       const { encryptSecretKey } = require('./keypair.service');
       const secret = 'SCZANGBA5RLKJZ65NOVCKVS2VIOWV2MRDBBR7BVNKPKGZBJKHOSXWC3';
-      const first  = encryptSecretKey(secret);
+      const first = encryptSecretKey(secret);
       const second = encryptSecretKey(secret);
       expect(first.iv).not.toBe(second.iv);
       expect(first.encryptedSecretKey).not.toBe(second.encryptedSecretKey);

@@ -39,7 +39,7 @@ export function useRealtimeUpdates(accessToken: string | null) {
       queryClient.invalidateQueries({ queryKey: queryKeys.payments.all });
     });
 
-    socket.on("notification:new", () => {
+    socket.on('notification:new', () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
     });
 

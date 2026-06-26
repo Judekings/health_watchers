@@ -7,7 +7,10 @@ import express from 'express';
 import { createServer } from 'http';
 import helmet from 'helmet';
 import cors from 'cors';
-import compression from 'compression';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const compression = require('compression') as ((...args: any[]) => any) & {
+  filter: (...args: any[]) => boolean;
+};
 import pinoHttp from 'pino-http';
 import mongoSanitize from 'express-mongo-sanitize';
 import mongoose from 'mongoose';
@@ -47,10 +50,10 @@ import { appointmentRoutes } from './modules/appointments/appointments.controlle
 import { waitlistRoutes } from './modules/appointments/waitlist.controller';
 import { labResultRoutes } from './modules/lab-results/lab-results.controller';
 import { icd10Routes } from './modules/icd10/icd10.controller';
-import { 
-  apiVersionHeader, 
-  v1DeprecationWarning, 
-  getSupportedVersions 
+import {
+  apiVersionHeader,
+  v1DeprecationWarning,
+  getSupportedVersions,
 } from './middlewares/api-versioning.middleware';
 import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
@@ -91,10 +94,7 @@ import {
   stopMfaGracePeriodJob,
 } from './modules/auth/mfa-grace-period-job';
 import { getCacheMetrics } from './services/cache.service';
-import {
-  mongodbConnectionPoolSize,
-  mongodbPoolWaitQueueSize,
-} from './services/metrics.service';
+import { mongodbConnectionPoolSize, mongodbPoolWaitQueueSize } from './services/metrics.service';
 import { metricsMiddleware } from './middlewares/metrics.middleware';
 import metricsRouter from './modules/metrics/metrics.routes';
 import { carePlanRoutes } from './modules/care-plans/care-plans.controller';
@@ -122,7 +122,6 @@ import exportRouter from './modules/export/export.routes';
 import { complianceRoutes } from './modules/compliance/compliance.controller';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
 import { breachIncidentRoutes } from './modules/breach-incidents/breach-incidents.controller';
-
 
 const app = express();
 const server = createServer(app);
@@ -155,7 +154,7 @@ app.use(
   compression({
     level: 6,
     threshold: 1024, // only compress responses > 1KB
-    filter: (req, res) => {
+    filter: (req: any, res: any) => {
       // Skip already-compressed content types (images, PDFs, etc.)
       const contentType = res.getHeader('Content-Type') as string | undefined;
       if (contentType) {

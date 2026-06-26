@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { config } from '@health-watchers/config';
 import { PaymentRecordModel } from './models/payment-record.model';
 import { PaymentDisputeModel } from './models/payment-dispute.model';
-import { authenticate } from '@api/middlewares/auth.middleware';
+import { authenticate, requireRoles } from '@api/middlewares/auth.middleware';
 import { validateRequest } from '@api/middlewares/validate.middleware';
 import {
   createPaymentIntentSchema,
@@ -1802,15 +1802,16 @@ router.post(
 
     try {
       const { multiSigPaymentService } = await import('./services/multisig-payment.service');
-      const { payment, multiSigPayment } = await multiSigPaymentService.createMultiSigPaymentRequest({
-        paymentId: undefined as any,
-        clinicId,
-        amount,
-        currency,
-        requiredSignatures,
-        signers,
-        description,
-      });
+      const { payment, multiSigPayment } =
+        await multiSigPaymentService.createMultiSigPaymentRequest({
+          paymentId: undefined as any,
+          clinicId: clinicId as any,
+          amount,
+          currency,
+          requiredSignatures,
+          signers,
+          description,
+        });
 
       paymentsInitiatedTotal.inc({ currency });
 
@@ -1835,14 +1836,24 @@ router.post(
 // POST /payments/multisig/:paymentId/sign — add a signature to a multi-sig payment
 router.post(
   '/multisig/:paymentId/sign',
-  validateRequest({ body: { type: 'object', properties: { signer: { type: 'string' }, signature: { type: 'string' } }, required: ['signer', 'signature'] } as any }),
+  validateRequest({
+    body: {
+      type: 'object',
+      properties: { signer: { type: 'string' }, signature: { type: 'string' } },
+      required: ['signer', 'signature'],
+    } as any,
+  }),
   asyncHandler(async (req: Request, res: Response) => {
     const { paymentId } = req.params;
     const { signer, signature } = req.body;
 
     try {
       const { multiSigPaymentService } = await import('./services/multisig-payment.service');
-      const multiSigPayment = await multiSigPaymentService.addSignature(paymentId, signer, signature);
+      const multiSigPayment = await multiSigPaymentService.addSignature(
+        paymentId,
+        signer,
+        signature
+      );
 
       return res.json({
         status: 'success',
@@ -1946,7 +1957,9 @@ router.get(
       claimableUntil: { $gte: now, $lte: in24h },
       claimed: { $ne: true },
     })
-      .select('intentId claimableBalanceId amount patientId claimableUntil claimableExpiryNotificationSent')
+      .select(
+        'intentId claimableBalanceId amount patientId claimableUntil claimableExpiryNotificationSent'
+      )
       .lean();
 
     return res.json({ status: 'success', data: records });

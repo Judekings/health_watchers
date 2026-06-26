@@ -74,7 +74,11 @@ const requireSecret = (req: express.Request, res: express.Response, next: expres
 };
 
 // Middleware: Check circuit breaker
-const checkCircuitBreakerMiddleware = (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+const checkCircuitBreakerMiddleware = (
+  _req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+) => {
   if (!checkCircuitBreaker()) {
     return res.status(503).json({
       error: 'Stellar network unavailable',
@@ -101,7 +105,7 @@ app.use((req, _res, next) => {
 app.use(
   pinoHttp({
     logger,
-    genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
+    genReqId: (req: any) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
     redact: ['req.headers.authorization'],
   })
 );
@@ -135,7 +139,7 @@ app.get('/health', async (_req, res) => {
   const horizon = await checkHorizon();
   const status = horizon.status === 'healthy' ? 'ok' : 'degraded';
   const cbState = getCircuitBreakerState();
-  
+
   return res.json({
     status,
     network: stellarConfig.network,
@@ -151,9 +155,9 @@ app.get('/health', async (_req, res) => {
 app.post('/fund', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
   // Return 403 on mainnet - Friendbot is testnet-only
   if (stellarConfig.network === 'mainnet') {
-    return res.status(403).json({ 
-      error: 'Forbidden', 
-      message: 'Friendbot funding is not available on mainnet' 
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Friendbot funding is not available on mainnet',
     });
   }
 
@@ -173,7 +177,11 @@ app.post('/fund', requireSecret, checkCircuitBreakerMiddleware, async (req, res)
 app.post('/intent', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
   try {
     const { fromPublicKey, toPublicKey, amount } = req.body;
-    const result = await retryWithBackoff(() => createIntent(fromPublicKey, toPublicKey, amount), 3, 1000);
+    const result = await retryWithBackoff(
+      () => createIntent(fromPublicKey, toPublicKey, amount),
+      3,
+      1000
+    );
     recordSuccess();
     return res.json({ success: true, ...result });
   } catch (error: any) {
@@ -190,7 +198,11 @@ app.post('/refund', requireSecret, checkCircuitBreakerMiddleware, async (req, re
     if (!toPublicKey || !amount) {
       return res.status(400).json({ error: 'toPublicKey and amount are required' });
     }
-    const result = await retryWithBackoff(() => issueRefund(toPublicKey, amount, memo || 'refund'), 3, 1000);
+    const result = await retryWithBackoff(
+      () => issueRefund(toPublicKey, amount, memo || 'refund'),
+      3,
+      1000
+    );
     recordSuccess();
     return res.json({ success: true, ...result });
   } catch (error: any) {
@@ -258,12 +270,12 @@ app.post('/trustline/usdc', requireSecret, async (req, res) => {
 // ✅ PROTECTED: GET /paths (requires secret)
 app.get('/paths', requireSecret, async (req, res) => {
   try {
-    const { 
-      sourceAssetCode, 
-      sourceAssetIssuer, 
-      destinationAssetCode, 
-      destinationAssetIssuer, 
-      destinationAmount 
+    const {
+      sourceAssetCode,
+      sourceAssetIssuer,
+      destinationAssetCode,
+      destinationAssetIssuer,
+      destinationAmount,
     } = req.query;
 
     if (!sourceAssetCode || !destinationAssetCode || !destinationAmount) {
@@ -309,7 +321,9 @@ app.post('/claimable-balance', requireSecret, checkCircuitBreakerMiddleware, asy
   try {
     const { fromPublicKey, amount, claimantPublicKey, claimableUntil } = req.body;
     if (!fromPublicKey || !amount || !claimantPublicKey || !claimableUntil) {
-      return res.status(400).json({ error: 'fromPublicKey, amount, claimantPublicKey, claimableUntil are required' });
+      return res
+        .status(400)
+        .json({ error: 'fromPublicKey, amount, claimantPublicKey, claimableUntil are required' });
     }
 
     const server = getHorizonServer();
@@ -351,70 +365,80 @@ app.post('/claimable-balance', requireSecret, checkCircuitBreakerMiddleware, asy
 });
 
 // ✅ PROTECTED: POST /claimable-balance/:balanceId/claim — clinic claims the escrowed funds
-app.post('/claimable-balance/:balanceId/claim', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
-  try {
-    const { balanceId } = req.params;
-    const server = getHorizonServer();
-    const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
-    const claimerAccount = await server.loadAccount(platformKeypair.publicKey());
-    const fee = await server.fetchBaseFee();
+app.post(
+  '/claimable-balance/:balanceId/claim',
+  requireSecret,
+  checkCircuitBreakerMiddleware,
+  async (req, res) => {
+    try {
+      const { balanceId } = req.params;
+      const server = getHorizonServer();
+      const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+      const claimerAccount = await server.loadAccount(platformKeypair.publicKey());
+      const fee = await server.fetchBaseFee();
 
-    const tx = buildClaimClaimableBalance({
-      claimerAccount,
-      balanceId: decodeURIComponent(balanceId),
-      networkPassphrase: getNetworkPassphrase(),
-      baseFee: String(fee),
-    });
+      const tx = buildClaimClaimableBalance({
+        claimerAccount,
+        balanceId: decodeURIComponent(balanceId),
+        networkPassphrase: getNetworkPassphrase(),
+        baseFee: String(fee),
+      });
 
-    tx.sign(platformKeypair);
+      tx.sign(platformKeypair);
 
-    if (stellarConfig.dryRun) {
-      return res.json({ success: true, txHash: `dry-run-claim-${Date.now()}`, dryRun: true });
+      if (stellarConfig.dryRun) {
+        return res.json({ success: true, txHash: `dry-run-claim-${Date.now()}`, dryRun: true });
+      }
+
+      const result = await server.submitTransaction(tx);
+      recordSuccess();
+      return res.json({ success: true, txHash: result.hash });
+    } catch (error: any) {
+      recordFailure();
+      const horizonError = parseHorizonError(error);
+      return res.status(horizonError.statusCode).json(horizonError);
     }
-
-    const result = await server.submitTransaction(tx);
-    recordSuccess();
-    return res.json({ success: true, txHash: result.hash });
-  } catch (error: any) {
-    recordFailure();
-    const horizonError = parseHorizonError(error);
-    return res.status(horizonError.statusCode).json(horizonError);
   }
-});
+);
 
 // ✅ PROTECTED: POST /claimable-balance/:balanceId/reclaim — patient reclaims after denial
-app.post('/claimable-balance/:balanceId/reclaim', requireSecret, checkCircuitBreakerMiddleware, async (req, res) => {
-  try {
-    const { balanceId } = req.params;
-    const server = getHorizonServer();
-    const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
-    const claimerAccount = await server.loadAccount(platformKeypair.publicKey());
-    const fee = await server.fetchBaseFee();
+app.post(
+  '/claimable-balance/:balanceId/reclaim',
+  requireSecret,
+  checkCircuitBreakerMiddleware,
+  async (req, res) => {
+    try {
+      const { balanceId } = req.params;
+      const server = getHorizonServer();
+      const platformKeypair = Keypair.fromSecret(stellarConfig.stellarSecretKey);
+      const claimerAccount = await server.loadAccount(platformKeypair.publicKey());
+      const fee = await server.fetchBaseFee();
 
-    // Reclaim uses the same ClaimClaimableBalance operation but signed by the platform
-    // acting on behalf of the patient (or the patient's key if available)
-    const tx = buildClaimClaimableBalance({
-      claimerAccount,
-      balanceId: decodeURIComponent(balanceId),
-      networkPassphrase: getNetworkPassphrase(),
-      baseFee: String(fee),
-    });
+      // Reclaim uses the same ClaimClaimableBalance operation but signed by the platform
+      // acting on behalf of the patient (or the patient's key if available)
+      const tx = buildClaimClaimableBalance({
+        claimerAccount,
+        balanceId: decodeURIComponent(balanceId),
+        networkPassphrase: getNetworkPassphrase(),
+        baseFee: String(fee),
+      });
 
-    tx.sign(platformKeypair);
+      tx.sign(platformKeypair);
 
-    if (stellarConfig.dryRun) {
-      return res.json({ success: true, txHash: `dry-run-reclaim-${Date.now()}`, dryRun: true });
+      if (stellarConfig.dryRun) {
+        return res.json({ success: true, txHash: `dry-run-reclaim-${Date.now()}`, dryRun: true });
+      }
+
+      const result = await server.submitTransaction(tx);
+      recordSuccess();
+      return res.json({ success: true, txHash: result.hash });
+    } catch (error: any) {
+      recordFailure();
+      const horizonError = parseHorizonError(error);
+      return res.status(horizonError.statusCode).json(horizonError);
     }
-
-    const result = await server.submitTransaction(tx);
-    recordSuccess();
-    return res.json({ success: true, txHash: result.hash });
-  } catch (error: any) {
-    recordFailure();
-    const horizonError = parseHorizonError(error);
-    return res.status(horizonError.statusCode).json(horizonError);
   }
-});
+);
 
 // ✅ PROTECTED: POST /fee-bump — wrap inner XDR in a platform-sponsored fee bump tx
 app.post('/fee-bump', requireSecret, async (req, res) => {
@@ -464,12 +488,15 @@ const closePaymentStream = startPaymentStream((payment) => {
 });
 
 const server: Server = app.listen(PORT, () => {
-  logger.info({ 
-    port: PORT, 
-    network: stellarConfig.network,
-    mainnetMode: stellarConfig.network === 'mainnet',
-    secret: SHARED_SECRET ? 'SET' : 'MISSING' 
-  }, 'Stellar Service running');
+  logger.info(
+    {
+      port: PORT,
+      network: stellarConfig.network,
+      mainnetMode: stellarConfig.network === 'mainnet',
+      secret: SHARED_SECRET ? 'SET' : 'MISSING',
+    },
+    'Stellar Service running'
+  );
 });
 
 // Graceful shutdown handler

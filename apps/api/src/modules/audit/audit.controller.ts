@@ -159,7 +159,9 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching audit logs');
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to retrieve audit logs' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to retrieve audit logs' });
   }
 });
 
@@ -208,11 +210,13 @@ router.get('/summary', authenticate, async (req: Request, res: Response) => {
 
     return res.json({
       status: 'success',
-      data: summary.map(s => ({ action: s._id, count: s.count })),
+      data: summary.map((s) => ({ action: s._id, count: s.count })),
     });
   } catch (error) {
     logger.error({ err: error }, 'Error fetching audit summary');
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to retrieve audit summary' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to retrieve audit summary' });
   }
 });
 
@@ -266,10 +270,7 @@ router.get('/export', authenticate, async (req: Request, res: Response) => {
 
   try {
     // Cap export at 10 000 rows to prevent memory exhaustion
-    const logs = await AuditLogModel.find(filter)
-      .sort({ timestamp: -1 })
-      .limit(10_000)
-      .lean();
+    const logs = await AuditLogModel.find(filter).sort({ timestamp: -1 }).limit(10_000).lean();
 
     const escape = (v: unknown): string => {
       const s = v == null ? '' : String(v);
@@ -278,8 +279,9 @@ router.get('/export', authenticate, async (req: Request, res: Response) => {
         : s;
     };
 
-    const header = 'timestamp,action,outcome,userId,clinicId,resourceType,resourceId,ipAddress,userAgent,requestId';
-    const rows = logs.map(l =>
+    const header =
+      'timestamp,action,outcome,userId,clinicId,resourceType,resourceId,ipAddress,userAgent,requestId';
+    const rows = logs.map((l) =>
       [
         l.timestamp?.toISOString() ?? '',
         l.action,
@@ -304,7 +306,9 @@ router.get('/export', authenticate, async (req: Request, res: Response) => {
     return res.send(csv);
   } catch (error) {
     logger.error({ err: error }, 'Error exporting audit logs');
-    return res.status(500).json({ error: 'InternalServerError', message: 'Failed to export audit logs' });
+    return res
+      .status(500)
+      .json({ error: 'InternalServerError', message: 'Failed to export audit logs' });
   }
 });
 

@@ -293,11 +293,28 @@ Closes #(issue number)
 ### TypeScript Requirements
 
 - Use **TypeScript** for all new code
-- Enable **strict mode** in tsconfig.json (already configured)
+- **Strict mode is enforced** across all packages — the root `tsconfig.base.json` enables `strict: true`, `noUncheckedIndexedAccess: true`, and `exactOptionalPropertyTypes: true`
 - **No `any` types** - use proper typing or `unknown` with type guards
+- **Array indexing** — `noUncheckedIndexedAccess` means `arr[0]` returns `T | undefined`; always guard or use `.at()` with a non-null assertion when the index is guaranteed
+- **Optional properties** — `exactOptionalPropertyTypes` means `{ foo?: string }` cannot be set to `undefined`; use `delete obj.foo` or omit the property instead of assigning `undefined`
 - **All functions must have return type annotations**
 - Use **interfaces** for object shapes
 - Use **enums** or **union types** for fixed sets of values
+
+#### TypeScript Configuration
+
+The monorepo uses a shared base config (`tsconfig.base.json`) extended by each app:
+
+| Flag | Value | Why |
+| --- | --- | --- |
+| `strict` | `true` | Enables all strict sub-checks (nullability, function types, etc.) |
+| `noUncheckedIndexedAccess` | `true` | Array/object indexing returns `T \| undefined`, preventing out-of-bounds crashes |
+| `exactOptionalPropertyTypes` | `true` | Distinguishes missing optional properties from `undefined`-valued ones |
+| `noUnusedLocals` | `true` | Dead code is a compile error |
+| `noUnusedParameters` | `true` | Unused parameters are a compile error |
+| `noImplicitReturns` | `true` | All code paths must return a value |
+
+Run `npm run typecheck` locally before pushing. CI fails on any TypeScript error.
 
 Example:
 ```typescript

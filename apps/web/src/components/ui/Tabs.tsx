@@ -108,7 +108,7 @@ export function TabsContent({ value, children, className }: TabsContentProps) {
       id={`tab-panel-${value}`}
       aria-labelledby={`tab-trigger-${value}`}
       tabIndex={0}
-      className={['focus:outline-none pt-4', className ?? ''].join(' ')}
+      className={['pt-4 focus:outline-none', className ?? ''].join(' ')}
     >
       {children}
     </div>

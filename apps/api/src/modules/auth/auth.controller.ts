@@ -218,7 +218,12 @@ router.post(
       });
     }
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId), isSuperAdmin: user.role === 'SUPER_ADMIN' };
+    const p = {
+      userId: user.id,
+      role: user.role,
+      clinicId: String(user.clinicId),
+      isSuperAdmin: user.role === 'SUPER_ADMIN',
+    };
     const { token: refreshToken, jti, family } = signRefreshToken(p);
     await RefreshTokenModel.create({
       jti,
@@ -269,7 +274,12 @@ router.post(
     existing.consumed = true;
     await existing.save();
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId), isSuperAdmin: user.role === 'SUPER_ADMIN' };
+    const p = {
+      userId: user.id,
+      role: user.role,
+      clinicId: String(user.clinicId),
+      isSuperAdmin: user.role === 'SUPER_ADMIN',
+    };
     const { token: refreshToken, jti, family } = signRefreshToken(p, decoded.family);
     await RefreshTokenModel.create({
       jti,
@@ -384,7 +394,12 @@ router.post(
     await user.save();
 
     await auditLog(
-      { action: 'LOGIN_SUCCESS', userId: user.id, clinicId: String(user.clinicId), metadata: { event: '2fa_enabled' } },
+      {
+        action: 'LOGIN_SUCCESS',
+        userId: user.id,
+        clinicId: String(user.clinicId),
+        metadata: { event: '2fa_enabled' },
+      },
       req
     );
 
@@ -442,7 +457,12 @@ router.post(
       await user.save();
     }
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId), isSuperAdmin: user.role === 'SUPER_ADMIN' };
+    const p = {
+      userId: user.id,
+      role: user.role,
+      clinicId: String(user.clinicId),
+      isSuperAdmin: user.role === 'SUPER_ADMIN',
+    };
     const { token: refreshToken, jti, family } = signRefreshToken(p);
     await RefreshTokenModel.create({
       jti,
@@ -471,7 +491,9 @@ router.post(
   async (req: Request<Record<string, never>, unknown, MfaBackupCodeDto>, res: Response) => {
     const userId = verifyTempToken(req.body.tempToken);
     if (!userId)
-      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid or expired temp token' });
+      return res
+        .status(401)
+        .json({ error: 'Unauthorized', message: 'Invalid or expired temp token' });
 
     const user = await UserModel.findById(userId).select('+mfaBackupCodes');
     if (!user || !user.isActive || !user.mfaEnabled || !user.mfaBackupCodes)
@@ -480,14 +502,21 @@ router.post(
     const codeHash = hashToken(req.body.backupCode);
     const idx = user.mfaBackupCodes.indexOf(codeHash);
     if (idx === -1) {
-      return res.status(400).json({ error: 'InvalidCode', message: 'Invalid or already used backup code' });
+      return res
+        .status(400)
+        .json({ error: 'InvalidCode', message: 'Invalid or already used backup code' });
     }
 
     // Mark code as used by removing it
     user.mfaBackupCodes.splice(idx, 1);
     await user.save();
 
-    const p = { userId: user.id, role: user.role, clinicId: String(user.clinicId), isSuperAdmin: user.role === 'SUPER_ADMIN' };
+    const p = {
+      userId: user.id,
+      role: user.role,
+      clinicId: String(user.clinicId),
+      isSuperAdmin: user.role === 'SUPER_ADMIN',
+    };
     const { token: refreshToken, jti, family } = signRefreshToken(p);
     await RefreshTokenModel.create({
       jti,
@@ -498,7 +527,11 @@ router.post(
     });
     return res.json({
       status: 'success',
-      data: { accessToken: signAccessToken(p), refreshToken, remainingBackupCodes: user.mfaBackupCodes.length },
+      data: {
+        accessToken: signAccessToken(p),
+        refreshToken,
+        remainingBackupCodes: user.mfaBackupCodes.length,
+      },
     });
   }
 );
@@ -517,7 +550,9 @@ router.delete(
   authenticate,
   validateRequest({ body: mfaDisableSchema }),
   async (req: Request<Record<string, never>, unknown, MfaDisableDto>, res: Response) => {
-    const user = await UserModel.findById(req.user!.userId).select('+password +mfaSecret +mfaBackupCodes');
+    const user = await UserModel.findById(req.user!.userId).select(
+      '+password +mfaSecret +mfaBackupCodes'
+    );
     if (!user || !user.mfaEnabled)
       return res.status(400).json({ error: 'BadRequest', message: '2FA is not enabled' });
 
@@ -545,7 +580,12 @@ router.delete(
     await user.save();
 
     await auditLog(
-      { action: 'LOGIN_SUCCESS', userId: user.id, clinicId: String(user.clinicId), metadata: { event: '2fa_disabled' } },
+      {
+        action: 'LOGIN_SUCCESS',
+        userId: user.id,
+        clinicId: String(user.clinicId),
+        metadata: { event: '2fa_disabled' },
+      },
       req
     );
 

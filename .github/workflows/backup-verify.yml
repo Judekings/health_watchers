@@ -52,8 +52,8 @@ jobs:
           VERIFY_DIR: /tmp/backup-verify
         run: |
           bash scripts/verify-backup.sh
-          echo "status=success" >> $GITHUB_OUTPUT
-          echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+          echo "status=success" >> "$GITHUB_OUTPUT"
+          echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Upload verification log
         if: always()
@@ -124,21 +124,21 @@ jobs:
           from: 'Health Watchers Alerts <${{ secrets.EMAIL_FROM }}>'
           body: |
             Backup Verification Failed
-            
+
             The MongoDB backup verification has failed. This indicates the backup may be corrupted or incomplete.
-            
+
             Details:
             - Timestamp: ${{ steps.verify.outputs.timestamp }}
             - Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             - Repository: ${{ github.repository }}
             - Branch: ${{ github.ref }}
-            
+
             Action Required:
             1. Review the verification log in the workflow artifacts
             2. Investigate the backup integrity
             3. Consider running a manual backup if needed
             4. Notify the DevOps team
-            
+
             This is a critical alert. Please respond immediately.
         continue-on-error: true
 
@@ -175,22 +175,22 @@ jobs:
             --limit=1 \
             --json=createdAt \
             --jq='.[0].createdAt' 2>/dev/null || echo "")
-          
+
           if [[ -z "$LAST_RUN" ]]; then
-            echo "status=never_run" >> $GITHUB_OUTPUT
+            echo "status=never_run" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          
+
           LAST_RUN_EPOCH=$(date -d "$LAST_RUN" +%s)
           NOW_EPOCH=$(date +%s)
-          DAYS_SINCE=$((($NOW_EPOCH - $LAST_RUN_EPOCH) / 86400))
-          
-          echo "days_since=$DAYS_SINCE" >> $GITHUB_OUTPUT
-          
+          DAYS_SINCE=$(( (NOW_EPOCH - LAST_RUN_EPOCH) / 86400 ))
+
+          echo "days_since=$DAYS_SINCE" >> "$GITHUB_OUTPUT"
+
           if [[ $DAYS_SINCE -gt 8 ]]; then
-            echo "status=stale" >> $GITHUB_OUTPUT
+            echo "status=stale" >> "$GITHUB_OUTPUT"
           else
-            echo "status=fresh" >> $GITHUB_OUTPUT
+            echo "status=fresh" >> "$GITHUB_OUTPUT"
           fi
         env:
           GH_TOKEN: ${{ github.token }}

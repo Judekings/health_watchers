@@ -2,7 +2,7 @@ import type { RiskLevel } from '../patients/models/patient.model';
 
 export interface RiskInput {
   ageYears: number;
-  diagnoses: string[];          // ICD-10 descriptions / codes
+  diagnoses: string[]; // ICD-10 descriptions / codes
   recentHospitalization: boolean;
   missedAppointments: number;
   abnormalLabCount: number;
@@ -36,13 +36,28 @@ export function calculateRiskScore(input: RiskInput): RiskResult {
   for (const d of input.diagnoses) {
     const lower = d.toLowerCase();
     if (lower.includes('diabetes') && !chronicMatches.has('diabetes')) {
-      score += 15; factors.push('Diabetes'); factorWeights['Diabetes'] = 15; chronicMatches.add('diabetes');
+      score += 15;
+      factors.push('Diabetes');
+      factorWeights['Diabetes'] = 15;
+      chronicMatches.add('diabetes');
     }
-    if ((lower.includes('hypertension') || lower.includes('high blood pressure')) && !chronicMatches.has('hypertension')) {
-      score += 15; factors.push('Hypertension'); factorWeights['Hypertension'] = 15; chronicMatches.add('hypertension');
+    if (
+      (lower.includes('hypertension') || lower.includes('high blood pressure')) &&
+      !chronicMatches.has('hypertension')
+    ) {
+      score += 15;
+      factors.push('Hypertension');
+      factorWeights['Hypertension'] = 15;
+      chronicMatches.add('hypertension');
     }
-    if ((lower.includes('copd') || lower.includes('chronic obstructive')) && !chronicMatches.has('copd')) {
-      score += 15; factors.push('COPD'); factorWeights['COPD'] = 15; chronicMatches.add('copd');
+    if (
+      (lower.includes('copd') || lower.includes('chronic obstructive')) &&
+      !chronicMatches.has('copd')
+    ) {
+      score += 15;
+      factors.push('COPD');
+      factorWeights['COPD'] = 15;
+      chronicMatches.add('copd');
     }
   }
 

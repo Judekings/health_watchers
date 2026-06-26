@@ -26,7 +26,7 @@ jobs:
 
       - name: Check for changesets
         run: |
-          if [ -z "$(ls -A .changeset/*.md 2>/dev/null | grep -v README.md)" ]; then
+          if ! find .changeset/ -maxdepth 1 -name '*.md' ! -name 'README.md' -print -quit 2>/dev/null | grep -q .; then
             echo "⚠️ No changeset found. If this PR includes user-facing changes, please run 'npm run changeset' to create one."
             echo ""
             echo "Skip this check if:"
