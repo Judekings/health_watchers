@@ -19,13 +19,12 @@ services:
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
       - xpack.security.authc.api_key.enabled=true
       - ELASTICSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - TZ=UTC
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
       - ./logging/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
     ports:
       - '9200:9200'
-    environment:
-      TZ: UTC
     networks:
       - health-watchers-logging
     healthcheck:
