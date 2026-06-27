@@ -54,6 +54,7 @@ import {
   apiVersionHeader,
   v1DeprecationWarning,
   getSupportedVersions,
+  acceptVersionMiddleware,
 } from './middlewares/api-versioning.middleware';
 import { traceIdHeader } from './middlewares/trace-id.middleware';
 import { clinicSettingsRoutes } from './modules/clinics/clinic-settings.controller';
@@ -121,7 +122,9 @@ import federationRouter from './modules/federation/federation.router';
 import exportRouter from './modules/export/export.routes';
 import { complianceRoutes } from './modules/compliance/compliance.controller';
 import { requestIdPropagationMiddleware } from './middlewares/request-id-propagation.middleware';
+import { correlationMiddleware } from './middlewares/correlation.middleware';
 import { breachIncidentRoutes } from './modules/breach-incidents/breach-incidents.controller';
+import { backupHealthRoutes } from './modules/health/backup-health.controller';
 
 const app = express();
 const server = createServer(app);
@@ -204,7 +207,10 @@ app.use(
   })
 );
 
-// ── Request ID propagation ────────────────────────────────────────────────────
+// ── Request ID correlation & propagation ──────────────────────────────────────
+// correlationMiddleware: stamps req.requestId and echoes X-Request-ID header
+app.use(correlationMiddleware);
+// requestIdPropagationMiddleware: stores the ID in AsyncLocalStorage for downstream services
 app.use(requestIdPropagationMiddleware);
 
 // ── Body parsing & sanitization ───────────────────────────────────────────────
@@ -231,6 +237,7 @@ app.use((req, res, next) => {
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.use('/health', healthRoutes);
+app.use('/health', backupHealthRoutes);
 
 // ── Prometheus metrics ────────────────────────────────────────────────────────
 // Must be registered before API routes so all requests are measured
@@ -242,6 +249,9 @@ app.get('/api/versions', (_req, res) => {
   const versions = getSupportedVersions();
   res.json(versions);
 });
+
+// ── Accept-Version header negotiation ─────────────────────────────────────────
+app.use('/api', acceptVersionMiddleware);
 
 // ── V1 API Routes (with deprecation warnings) ────────────────────────────────
 app.use('/api/v1', v1DeprecationWarning);
