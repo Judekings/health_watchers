@@ -33,6 +33,7 @@ import {
 import { LabResultModel } from '../lab-results/lab-result.model';
 import { ImmunizationModel } from '../immunizations/immunization.model';
 import { emitToClinic, emitToUser } from '@api/realtime/socket';
+import { getPatientTimeline } from './portal.timeline.service';
 import { sendMail } from '@api/utils/mailer';
 import { generatePatientFriendlySummary, isAIServiceAvailable } from '../ai/ai.service';
 import { sanitizeText } from '@api/utils/sanitize';
@@ -715,6 +716,76 @@ router.get(
       limit,
       { scheduledAt: -1 }
     );
+
+    return res.json({ status: 'success', data: result.data, meta: result.meta });
+  })
+);
+
+// ── GET /api/v1/portal/timeline ───────────────────────────────────────────────
+/**
+ * @openapi
+ * /portal/timeline:
+ *   get:
+ *     summary: Get patient health events in chronological order
+ *     tags: [Portal]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 100 }
+ *       - in: query
+ *         name: eventType
+ *         schema:
+ *           type: string
+ *           enum: [encounter, lab_result, immunization, prescription, appointment]
+ *       - in: query
+ *         name: startDate
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: endDate
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Paginated list of health events in chronological order
+ *       400:
+ *         description: Validation error
+ */
+router.get(
+  '/timeline',
+  authenticate,
+  requirePatient,
+  validateRequest({ query: portalTimelineQuerySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const pagination = parsePagination(req.query as Record<string, any>);
+    if (!pagination) {
+      return res
+        .status(400)
+        .json({ error: 'ValidationError', message: 'limit must not exceed 100' });
+    }
+
+    const query = req.query as {
+      page?: string;
+      limit?: string;
+      eventType?: string;
+      startDate?: string;
+      endDate?: string;
+    };
+
+    const result = await getPatientTimeline({
+      patientId: req.user!.patientId,
+      clinicId: req.user!.clinicId,
+      query: {
+        page: query.page,
+        limit: query.limit,
+        eventType: query.eventType as any,
+        startDate: query.startDate,
+        endDate: query.endDate,
+      },
+    });
 
     return res.json({ status: 'success', data: result.data, meta: result.meta });
   })
