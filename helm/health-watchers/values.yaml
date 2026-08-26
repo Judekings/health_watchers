@@ -84,6 +84,12 @@ web:
   pdb:
     enabled: true
     minAvailable: 1
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: 80
   livenessProbe:
     path: /
     initialDelaySeconds: 20
