@@ -59,6 +59,10 @@ coverage/
 .jest_cache/
 jest-results.json
 test-results/
+__snapshots__/
+*.snap
+playwright-report/
+.playwright/
 
 # =============================================================================
 # TypeScript
