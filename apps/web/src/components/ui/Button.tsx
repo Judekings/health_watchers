@@ -5,7 +5,7 @@ import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { Spinner } from './Spinner';
 
 const button = cva(
-  'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-touch',
   {
     variants: {
       variant: {
@@ -21,9 +21,9 @@ const button = cva(
           'border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 active:bg-neutral-100 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:active:bg-neutral-700',
       },
       size: {
-        sm: 'h-8  px-3 text-xs',
-        md: 'h-10 px-4 text-sm',
-        lg: 'h-12 px-6 text-base',
+        sm: 'h-8 px-3 text-xs md:text-sm',
+        md: 'h-10 px-4 text-sm md:text-base',
+        lg: 'h-12 px-6 text-base md:text-lg',
       },
     },
     defaultVariants: { variant: 'primary', size: 'md' },

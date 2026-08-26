@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import type { HTMLAttributes } from 'react';
 
-const badge = cva('inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium', {
+const badge = cva('inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs font-medium md:text-sm', {
   variants: {
     variant: {
       default: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300',

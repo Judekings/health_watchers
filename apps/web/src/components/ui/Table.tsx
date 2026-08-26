@@ -3,14 +3,26 @@ import type { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from 'react';
 export function Table({ className, children, ...props }: HTMLAttributes<HTMLTableElement>) {
   return (
     <div className="w-full overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-700">
-      <table
-        className={['w-full text-sm text-neutral-700 dark:text-neutral-300', className ?? ''].join(
-          ' '
-        )}
-        {...props}
-      >
-        {children}
-      </table>
+      <div className="md:hidden overflow-x-auto">
+        <table
+          className={['w-full text-sm text-neutral-700 dark:text-neutral-300', className ?? ''].join(
+            ' '
+          )}
+          {...props}
+        >
+          {children}
+        </table>
+      </div>
+      <div className="hidden md:block">
+        <table
+          className={['w-full text-sm text-neutral-700 dark:text-neutral-300', className ?? ''].join(
+            ' '
+          )}
+          {...props}
+        >
+          {children}
+        </table>
+      </div>
     </div>
   );
 }

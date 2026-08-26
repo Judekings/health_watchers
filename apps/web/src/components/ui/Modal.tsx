@@ -13,9 +13,9 @@ export interface ModalProps {
 }
 
 const sizeMap = {
-  sm: 'max-w-sm',
-  md: 'max-w-lg',
-  lg: 'max-w-2xl',
+  sm: 'max-w-sm md:max-w-md',
+  md: 'max-w-lg md:max-w-2xl',
+  lg: 'max-w-2xl md:max-w-4xl',
 };
 
 export function Modal({
