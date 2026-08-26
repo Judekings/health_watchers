@@ -5,6 +5,7 @@ import { paymentExportRoutes } from './payments.export.controller';
 import { claimsRoutes } from './claims.controller';
 import { batchPaymentRouter } from './batch-payment.controller';
 import { exchangeRateRoutes } from './exchange-rate.controller';
+import { claimableBalanceRoutes } from './claimable-balance.routes';
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use('/', paymentRoutes);
 router.use('/', disputeRoutes);
 router.use('/claims', claimsRoutes);
 router.use('/batch', batchPaymentRouter);
+router.use('/', claimableBalanceRoutes);
 
 export default router;

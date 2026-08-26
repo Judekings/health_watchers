@@ -15,7 +15,7 @@ export { SectionErrorBoundary } from './SectionErrorBoundary';
 export { ErrorMessage } from './ErrorMessage';
 export { PageWrapper, PageHeader } from './PageWrapper';
 export { SlideOver } from './SlideOver';
-export { Toast, Toaster, toast } from './Toast';
+export { Toast, Toaster, toast } from './toast';
 export { AssetSelector } from './AssetSelector';
 export { StellarAddressDisplay } from './StellarAddressDisplay';
 export { SearchInput, type SearchInputProps } from './SearchInput';
