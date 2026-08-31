@@ -37,6 +37,44 @@ export interface ClaimableBalanceRecord {
   lastModifiedTime: string;
 }
 
+export interface EscrowRecord {
+  balanceId: string;
+  status: 'created' | 'claimed' | 'refunded' | 'expired';
+  amount: string;
+  asset: string;
+  claimantPublicKey: string;
+  refundPublicKey: string;
+  claimableAfter: Date;
+  claimableUntil: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const ESCROW_STORE_KEY = 'escrow_records';
+
+function getEscrowStore(): Map<string, EscrowRecord> {
+  const store = new Map<string, EscrowRecord>();
+  const data = globalThis[ESCROW_STORE_KEY];
+  if (data && typeof data === 'object') {
+    for (const [key, value] of Object.entries(data)) {
+      store.set(key, value as EscrowRecord);
+    }
+  }
+  return store;
+}
+
+function setEscrowStore(store: Map<string, EscrowRecord>): void {
+  const obj: Record<string, EscrowRecord> = {};
+  for (const [key, value] of store.entries()) {
+    obj[key] = value;
+  }
+  globalThis[ESCROW_STORE_KEY] = obj;
+}
+
+function isBalanceExpired(claimableUntil: Date): boolean {
+  return new Date() > claimableUntil;
+}
+
 /**
  * Create an escrow with time-based claimable balance
  * Allows refunding if the balance is not claimed by claimableUntil
@@ -66,8 +104,6 @@ export function createEscrow(params: EscrowParams): StellarSdk.Transaction {
     'Creating escrow'
   );
 
-  // Create predicate: claimable after claimableAfter AND before claimableUntil
-  // After that time, the refunder can reclaim
   const claimantPredicate = StellarSdk.Claimant.predicateAnd(
     StellarSdk.Claimant.predicateNot(
       StellarSdk.Claimant.predicateBeforeAbsoluteTime(
@@ -79,9 +115,8 @@ export function createEscrow(params: EscrowParams): StellarSdk.Transaction {
     )
   );
 
-  // Refunder can claim anytime after claimableUntil
   const refunderPredicate = StellarSdk.Claimant.predicateBeforeAbsoluteTime(
-    Math.floor(new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 100).getTime() / 1000).toString() // Far future
+    Math.floor(new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 100).getTime() / 1000).toString()
   );
 
   const claimants = [
@@ -270,3 +305,56 @@ export async function getRefundableBalances(
     throw error;
   }
 }
+
+/**
+ * Check if an escrow has expired and can be refunded
+ */
+export function isEscrowExpired(balanceId: string): boolean {
+  const store = getEscrowStore();
+  const escrow = store.get(balanceId);
+  if (!escrow) return false;
+  return isBalanceExpired(escrow.claimableUntil);
+}
+
+/**
+ * Get escrow status by balance ID
+ */
+export function getEscrowStatus(balanceId: string): EscrowRecord | null {
+  const store = getEscrowStore();
+  return store.get(balanceId) || null;
+}
+
+/**
+ * Record escrow creation in local store for tracking
+ */
+export function recordEscrowCreation(record: Omit<EscrowRecord, 'status' | 'updatedAt'>): EscrowRecord {
+  const store = getEscrowStore();
+  const now = new Date();
+  const escrow: EscrowRecord = {
+    ...record,
+    status: 'created',
+    updatedAt: now,
+  };
+  store.set(record.balanceId, escrow);
+  setEscrowStore(store);
+  return escrow;
+}
+
+/**
+ * Update escrow status after claim or refund
+ */
+export function updateEscrowStatus(balanceId: string, status: EscrowRecord['status']): EscrowRecord | null {
+  const store = getEscrowStore();
+  const escrow = store.get(balanceId);
+  if (!escrow) return null;
+
+  const updated: EscrowRecord = {
+    ...escrow,
+    status,
+    updatedAt: new Date(),
+  };
+  store.set(balanceId, updated);
+  setEscrowStore(store);
+  return updated;
+}
+
