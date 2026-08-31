@@ -1,259 +1,75 @@
-# Mobile Responsive Design Guide
+# Responsive Design System Guide
 
-## Responsive Breakpoints
+## Breakpoints
 
-Health Watchers uses Tailwind CSS with the following breakpoints:
+| Name | Min-width | Target Devices |
+|------|-----------|----------------|
+| `xs` | `475px` | Large phones |
+| `sm` | `640px` | Tablets portrait |
+| `md` | `768px` | Tablets landscape / small laptops |
+| `lg` | `1024px` | Laptops / desktops |
+| `xl` | `1280px` | Large desktops |
+| `2xl` | `1536px` | Extra-large screens |
 
-- **Mobile**: < 640px (single column, bottom navigation)
-- **Tablet**: 640px - 1024px (two column, collapsible sidebar)
-- **Desktop**: > 1024px (full layout with sidebar)
+## Spacing Scale
 
-## Touch-Friendly UI Guidelines
+Use the extended spacing utilities for consistent layout:
+- `p-4 sm:p-6 lg:p-8` — responsive page padding
+- `gap-4 sm:gap-6 lg:gap-8` — responsive grid/flex gaps
+- `max-w-7xl mx-auto` — constrained content width
 
-### Minimum Touch Target Size
+## Typography
 
-All interactive elements must have a minimum size of 44x44px:
+- Headings: `text-2xl sm:text-3xl lg:text-4xl`
+- Body: `text-sm sm:text-base`
+- Captions: `text-xs sm:text-sm`
 
+## Component Patterns
+
+### Cards
 ```tsx
-// Use the touch-target utility class
-<button className="touch-target px-4 py-2">
-  Click me
-</button>
-
-// Or use min-w-touch and min-h-touch
-<button className="min-w-touch min-h-touch">
-  <Icon />
-</button>
-```
-
-### Mobile Navigation
-
-On mobile devices (< 768px), the sidebar is replaced with a bottom navigation bar:
-
-```tsx
-import { MobileNavigation } from '@/components/MobileNavigation';
-
-// In your layout
-<MobileNavigation />
-```
-
-The bottom navigation includes:
-- Dashboard
-- Patients
-- Encounters
-- Payments
-- More (for additional menu items)
-
-### Responsive Layout Example
-
-```tsx
-<div className="container mx-auto px-4">
-  {/* Mobile: single column, Tablet: 2 columns, Desktop: 3 columns */}
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-    <Card />
-    <Card />
-    <Card />
-  </div>
+<div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:p-6 dark:border-neutral-800 dark:bg-neutral-900">
+  {/* content */}
 </div>
 ```
 
-### Responsive Typography
-
+### Tables
 ```tsx
-<h1 className="text-2xl md:text-3xl lg:text-4xl font-bold">
-  Responsive Heading
-</h1>
-
-<p className="text-sm md:text-base">
-  Responsive paragraph text
-</p>
-```
-
-### Responsive Spacing
-
-```tsx
-<div className="p-4 md:p-6 lg:p-8">
-  Content with responsive padding
-</div>
-
-<div className="space-y-4 md:space-y-6">
-  Responsive vertical spacing
+<div className="overflow-x-auto -mx-4 sm:mx-0">
+  <table className="min-w-full">
+    {/* table content */}
+  </table>
 </div>
 ```
 
-## PWA Features
-
-### Service Worker
-
-The service worker is automatically registered and provides:
-
-- **Offline caching** for static assets
-- **Network-first strategy** for API requests
-- **Cache-first strategy** for static resources
-- **Offline fallback page**
-
-### Installation
-
-Users can install the app on their devices:
-
+### Forms
 ```tsx
-import { usePWA } from '@/hooks/usePWA';
-
-function InstallButton() {
-  const { canInstall, installApp } = usePWA();
-
-  if (!canInstall) return null;
-
-  return (
-    <button onClick={installApp} className="touch-target">
-      Install App
-    </button>
-  );
-}
-```
-
-### Offline Indicator
-
-Show users when they're offline:
-
-```tsx
-import { OfflineIndicator } from '@/components/OfflineIndicator';
-
-// In your layout
-<OfflineIndicator />
-```
-
-## Mobile-Specific Features
-
-### Pull-to-Refresh
-
-Implement pull-to-refresh on list pages:
-
-```tsx
-const [refreshing, setRefreshing] = useState(false);
-
-const handleRefresh = async () => {
-  setRefreshing(true);
-  await fetchData();
-  setRefreshing(false);
-};
-
-// Use a library like react-pull-to-refresh
-<PullToRefresh onRefresh={handleRefresh}>
-  <PatientList />
-</PullToRefresh>
-```
-
-### Swipe Gestures
-
-Use swipe gestures for navigation:
-
-```tsx
-import { useSwipeable } from 'react-swipeable';
-
-const handlers = useSwipeable({
-  onSwipedLeft: () => goToNextPage(),
-  onSwipedRight: () => goToPreviousPage(),
-});
-
-<div {...handlers}>
-  Swipeable content
+<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  {/* form fields */}
 </div>
 ```
 
-### Safe Area Insets
+### Navigation
+- Mobile: Bottom navigation bar (`MobileNavigation`)
+- Tablet/Desktop: Sidebar (`Sidebar`) + TopBar
+- Hide/show with responsive utilities: `hidden md:block`, `md:hidden`
 
-Handle notches and safe areas on iOS:
+## Images
 
+Use Next.js `Image` with `sizes` attribute:
 ```tsx
-<div className="safe-area-top safe-area-bottom">
-  Content that respects safe areas
-</div>
+<Image
+  src="/logo.png"
+  alt="Logo"
+  width={120}
+  height={40}
+  sizes="(max-width: 640px) 100px, 120px"
+  className="h-auto w-auto"
+/>
 ```
 
-## Testing Responsive Design
+## Testing
 
-### Browser DevTools
-
-1. Open Chrome DevTools (F12)
-2. Click the device toolbar icon (Ctrl+Shift+M)
-3. Test different device sizes:
-   - iPhone SE (375px)
-   - iPhone 12 Pro (390px)
-   - iPad (768px)
-   - Desktop (1280px+)
-
-### Lighthouse PWA Audit
-
-Run Lighthouse audit to check PWA score:
-
-```bash
-npm run lighthouse
-```
-
-Target scores:
-- PWA: > 90
-- Performance: > 90
-- Accessibility: > 90
-
-## Common Patterns
-
-### Responsive Table
-
-```tsx
-{/* Desktop: table, Mobile: cards */}
-<div className="hidden md:block">
-  <table>...</table>
-</div>
-
-<div className="md:hidden space-y-4">
-  {items.map(item => (
-    <Card key={item.id}>
-      <CardContent>{item.name}</CardContent>
-    </Card>
-  ))}
-</div>
-```
-
-### Responsive Modal
-
-```tsx
-<Dialog>
-  <DialogContent className="w-full max-w-lg mx-4 md:mx-auto">
-    Modal content
-  </DialogContent>
-</Dialog>
-```
-
-### Responsive Form
-
-```tsx
-<form className="space-y-4">
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <Input label="First Name" />
-    <Input label="Last Name" />
-  </div>
-  
-  <Input label="Email" className="w-full" />
-  
-  <Button className="w-full md:w-auto touch-target">
-    Submit
-  </Button>
-</form>
-```
-
-## Accessibility
-
-- All touch targets minimum 44x44px
-- Sufficient color contrast (WCAG AA)
-- Keyboard navigation support
-- Screen reader friendly
-- Focus indicators visible
-
-## Performance
-
-- Lazy load images
-- Code splitting for routes
-- Minimize bundle size
-- Use next/image for optimized images
-- Implement virtual scrolling for long lists
+- Test all pages at `xs`, `sm`, `md`, `lg`, `xl`, `2xl` breakpoints
+- Verify no horizontal scroll on any viewport
+- Lighthouse mobile score target: > 90

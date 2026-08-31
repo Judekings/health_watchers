@@ -13,7 +13,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
   const { user, logout } = useAuth();
 
   return (
-    <header className="bg-neutral-0 flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 px-4 dark:border-neutral-700 dark:bg-neutral-800">
+    <header className="bg-neutral-0 flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 px-4 sm:px-6 dark:border-neutral-700 dark:bg-neutral-800">
       {/* Left: hamburger (mobile) */}
       <div className="flex items-center gap-3">
         <button
@@ -48,7 +48,7 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
       </span>
 
       {/* Right: clinic switcher (SUPER_ADMIN) + theme toggle + notification bell + avatar + logout */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <ClinicSwitcher />
         <ThemeToggle />
         <NotificationBell />
@@ -66,7 +66,8 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
           className="text-sm text-neutral-500 hover:text-neutral-800 focus:underline focus:outline-none dark:text-neutral-400 dark:hover:text-neutral-100"
           aria-label="Log out"
         >
-          Logout
+          <span className="hidden sm:inline">Logout</span>
+          <span className="sm:hidden">Exit</span>
         </button>
       </div>
     </header>

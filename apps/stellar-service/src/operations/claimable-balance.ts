@@ -2,22 +2,18 @@ import * as StellarSdk from '@stellar/stellar-sdk';
 import type { ServerApi } from '@stellar/stellar-sdk/lib/horizon';
 import { withHorizonCall } from '../stellar.js';
 
-export interface ClaimableBalanceParams {
-  sourceAccount: StellarSdk.Account;
+export interface ClaimableBalanceRecord {
+  id: string;
   amount: string;
-  asset: StellarSdk.Asset;
-  claimantPublicKey: string;
-  claimableAfter: Date;
-  claimableUntil: Date;
-  networkPassphrase: string;
-  baseFee: string;
+  asset: string;
+  claimants: any[];
+  lastModifiedLedger: number;
+  lastModifiedTime: string;
+  status: 'created' | 'claimed' | 'refunded' | 'expired';
 }
 
-export interface ClaimBalanceParams {
-  claimerAccount: StellarSdk.Account;
-  balanceId: string;
-  networkPassphrase: string;
-  baseFee: string;
+function isBalanceExpired(claimableUntil: Date): boolean {
+  return new Date() > claimableUntil;
 }
 
 export function createClaimableBalance(params: ClaimableBalanceParams): StellarSdk.Transaction {
@@ -31,6 +27,14 @@ export function createClaimableBalance(params: ClaimableBalanceParams): StellarS
     networkPassphrase,
     baseFee,
   } = params;
+
+  if (isBalanceExpired(claimableUntil)) {
+    throw new Error('claimableUntil must be in the future');
+  }
+
+  if (claimableAfter >= claimableUntil) {
+    throw new Error('claimableAfter must be before claimableUntil');
+  }
 
   // Create claimant with time-based predicates
   const claimant = new StellarSdk.Claimant(
@@ -82,13 +86,49 @@ export function claimClaimableBalance(params: ClaimBalanceParams): StellarSdk.Tr
   return transaction;
 }
 
-export async function getClaimableBalances(
+export async function getClaimableBalance(
   server: StellarSdk.Horizon.Server,
-  claimantPublicKey: string
-): Promise<ServerApi.ClaimableBalanceRecord[]> {
-  const balances = await withHorizonCall('claimableBalances', { claimantPublicKey }, () =>
-    server.claimableBalances().claimant(claimantPublicKey).limit(200).call()
-  );
+  balanceId: string
+): Promise<ClaimableBalanceRecord | null> {
+  try {
+    const response = await withHorizonCall(
+      'claimableBalance',
+      { balanceId, operation: 'getClaimableBalance' },
+      () => server.claimableBalances().claimableBalance(balanceId).call()
+    );
 
-  return balances.records;
+    return {
+      id: response.id,
+      amount: response.amount,
+      asset: response.asset,
+      claimants: response.claimants,
+      lastModifiedLedger: response.last_modified_ledger,
+      lastModifiedTime:
+        (response as any).last_modified_time ||
+        (response as any).created_at ||
+        new Date().toISOString(),
+      status: isBalanceExpired(new Date((response as any).last_modified_time || Date.now()))
+        ? 'expired'
+        : 'created',
+    };
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export function isClaimableBalanceValid(balance: ClaimableBalanceRecord): boolean {
+  return balance.status === 'created';
+}
+
+export function canClaimBalance(balance: ClaimableBalanceRecord, claimantPublicKey: string): boolean {
+  if (!isClaimableBalanceValid(balance)) {
+    return false;
+  }
+
+  return balance.claimants.some(
+    (c: any) => c.destination === claimantPublicKey && !c.predicate?.beforeAbsoluteTime
+  );
 }
